@@ -1,0 +1,38 @@
+{
+  "name": "@koe/db",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./schema": {
+      "types": "./dist/schema/index.d.ts",
+      "import": "./dist/schema/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "node ./dist/migrate.js"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.2.17",
+    "@koe/core": "*",
+    "drizzle-orm": "^0.39.3",
+    "pg": "^8.13.3",
+    "postgres": "^3.4.5"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.11.11",
+    "@types/uuid": "^10.0.0",
+    "drizzle-kit": "^0.30.4",
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.7"
+  }
+}

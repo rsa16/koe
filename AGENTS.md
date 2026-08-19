@@ -12,7 +12,7 @@ This is a greenfield project. The codebase is currently transitioning from the d
 
 - **Tickets**: The implementation is broken down into tracer-bullet vertical slices located in `.scratch/headless-comments/issues/`.
 - **Execution**: Implement tickets sequentially, starting from `01`. Each ticket must be fully vertical and testable. Do not attempt wide horizontal scaffolding beyond what a ticket asks for.
-- **Target Stack**: `pnpm` Turborepo containing Fastify (`server`), Drizzle ORM (`db`), Lit (`widget`), and React + MUI (`admin`).
+- **Target Stack**: `npm` Turborepo containing Fastify (`server`), Drizzle ORM (`db`), Lit (`widget`), and React + MUI (`admin`).
 
 ## Agent Skills
 
