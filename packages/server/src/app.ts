@@ -1,9 +1,9 @@
-import Fastify, { FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
 import sensible from "@fastify/sensible";
-import { threads, Database } from "@koe/db";
-import { eq } from "drizzle-orm";
 import { GetThreadByRefParamsSchema, GetThreadByRefQuerySchema } from "@koe/core";
+import { Database, threads } from "@koe/db";
+import { eq } from "drizzle-orm";
+import Fastify, { FastifyInstance } from "fastify";
 
 export interface BuildAppOptions {
   db: Database;
@@ -56,7 +56,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     return reply.status(200).send({ status: "ok" });
   });
 
-  // Register GET /threads/by-ref/:ref and /api/v1/threads/by-ref/:ref
+  // Register GET /api/v1/threads/by-ref/:ref
   const getThreadHandler = async (request: any, reply: any) => {
     const paramsParsed = GetThreadByRefParamsSchema.safeParse(request.params);
     if (!paramsParsed.success) {
@@ -102,7 +102,6 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     return reply.status(200).send(inserted[0]);
   };
 
-  app.get("/threads/by-ref/:ref", getThreadHandler);
   app.get("/api/v1/threads/by-ref/:ref", getThreadHandler);
 
   return app;
