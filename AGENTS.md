@@ -13,12 +13,13 @@ Self-hosted headless commenting backend (Fastify + Drizzle ORM + PostgreSQL) wit
 
 - `packages/core`: Shared Zod schemas, TypeScript types, and event definitions (contracts consumed by server & SDK).
 - `packages/db`: Drizzle ORM schema, migration SQL (`drizzle/`), migration runner (`src/migrate.ts`), and PGlite in-memory test DB (`src/mem.ts`).
+- `packages/auth`: Bearer access-token signing/verification and admin session-cookie logic.
 - `packages/server`: Fastify REST API (`/api/v1` and un-prefixed aliases).
 - `apps/`: Planned web widget (Lit) and admin dashboard (React + MUI).
 
 ## Development & Testing Commands
 
-Build artifact dependency: `@koe/server` depends on `@koe/core` and `@koe/db` via built `dist/` outputs. Always run builds in dependency order (`turbo run build` handles this).
+Build artifact dependency: `@koe/server` depends on `@koe/core`, `@koe/db`, and `@koe/auth` via built `dist/` outputs. Always run builds in dependency order (`turbo run build` handles this).
 
 ```bash
 # Build all workspaces

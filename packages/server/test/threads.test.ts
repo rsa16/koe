@@ -9,7 +9,11 @@ describe("Server API Seam Integration Tests", () => {
 
   beforeEach(async () => {
     const { db } = await createMemDb();
-    app = buildApp({ db, logger: false });
+    app = buildApp({
+      db,
+      jwtSecret: "test-jwt-secret-at-least-32-chars-long",
+      logger: false,
+    });
     await app.ready();
   });
 

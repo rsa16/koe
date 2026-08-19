@@ -91,6 +91,13 @@ export const CommentSchema = z.object({
 });
 export type Comment = z.infer<typeof CommentSchema>;
 
+// Auth schemas
+export const AnonymousAuthResponseSchema = z.object({
+  accessToken: z.string(),
+  user: UserSchema,
+});
+export type AnonymousAuthResponse = z.infer<typeof AnonymousAuthResponseSchema>;
+
 // Session schemas
 export const SessionSchema = z.object({
   id: z.string().uuid(),

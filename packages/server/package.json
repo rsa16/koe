@@ -24,6 +24,7 @@
   "dependencies": {
     "@fastify/cors": "^10.0.2",
     "@fastify/sensible": "^6.0.3",
+    "@koe/auth": "*",
     "@koe/core": "*",
     "@koe/db": "*",
     "dotenv": "^16.4.7",
