@@ -1,26 +1,55 @@
 # koe - Headless Commenting System
 
-This is a greenfield project. The codebase is currently transitioning from the design phase to the implementation phase.
+Self-hosted headless commenting backend (Fastify + Drizzle ORM + PostgreSQL) with Lit web component and React/MUI admin UI.
 
 ## Architecture & Domain Constraints
 
-- **Terminology**: Strict adherence to `CONTEXT.md` is required. Use these exact terms in all code, tests, and discussions. Do not invent synonyms.
-- **Design & Specs**: See `spec.md` for the full feature set, testing seam expectations (API boundary only), and out-of-scope items.
-- **Decisions**: Check `docs/adr/` for architectural decision records (e.g., cross-origin hybrid auth) before proposing design changes.
+- **Terminology**: Strict adherence to `CONTEXT.md` is required. Use exact domain terms (`Thread`, `Comment`, `Identity`, `User`, `Vote`, `Reaction`, `Report`, etc.) in all code, tests, and API payloads. Never invent synonyms.
+- **Design & Specs**: See `spec.md` for feature requirements, testing seam expectations (API boundary only), and out-of-scope items.
+- **Decisions**: Check `docs/adr/` before proposing design changes (e.g. `0001-hybrid-cross-origin-auth.md` for bearer vs cookie auth).
+- **Errors**: RFC 9457 Problem Details (`application/problem+json`) on all API endpoints.
+
+## Monorepo Layout
+
+- `packages/core`: Shared Zod schemas, TypeScript types, and event definitions (contracts consumed by server & SDK).
+- `packages/db`: Drizzle ORM schema, migration SQL (`drizzle/`), migration runner (`src/migrate.ts`), and PGlite in-memory test DB (`src/mem.ts`).
+- `packages/server`: Fastify REST API (`/api/v1` and un-prefixed aliases).
+- `apps/`: Planned web widget (Lit) and admin dashboard (React + MUI).
+
+## Development & Testing Commands
+
+Build artifact dependency: `@koe/server` depends on `@koe/core` and `@koe/db` via built `dist/` outputs. Always run builds in dependency order (`turbo run build` handles this).
+
+```bash
+# Build all workspaces
+npm run build
+
+# Typecheck all workspaces (builds dependencies first)
+npm run typecheck
+
+# Run test suites across all packages (Vitest)
+npm run test
+
+# Run a single package or test file
+npm --workspace=@koe/server test
+npx vitest run packages/server/test/threads.test.ts
+
+# Dev live-reload (Turborepo watch mode)
+npm run dev
+
+# Drizzle migrations
+npm --workspace=@koe/db run db:generate   # Generate migration from schema changes
+npm --workspace=@koe/db run db:migrate    # Run migrations against $DATABASE_URL
+```
+
+## Testing Seams & Environment Quirks
+
+- **Seam**: Public REST API boundary. Test external behavior (status codes, Problem Details format, observable state via subsequent API calls), not internal DB tables directly.
+- **Postgres in Tests**: Fast unit/integration tests run against `@electric-sql/pglite` in-memory (`createMemDb()` in `@koe/db`). Docker is not required for unit/integration tests in Vitest.
+- **Docker Compose**: `compose.yaml` (Postgres 18 + one-shot migration runner + server) and `compose.dev.yaml` (watch mode).
 
 ## Workflow & Implementation
 
-- **Tickets**: The implementation is broken down into tracer-bullet vertical slices located in `.scratch/headless-comments/issues/`.
-- **Execution**: Implement tickets sequentially, starting from `01`. Each ticket must be fully vertical and testable. Do not attempt wide horizontal scaffolding beyond what a ticket asks for.
-- **Target Stack**: `npm` Turborepo containing Fastify (`server`), Drizzle ORM (`db`), Lit (`widget`), and React + MUI (`admin`).
-
-## Agent Skills
-
-### Issue tracker
-Issues theoretically live in GitHub Issues (`gh`), but are currently staged locally in `.scratch/` until the remote is established. See `docs/agents/issue-tracker.md`.
-
-### Triage labels
-The triage label vocabulary uses the default roles. See `docs/agents/triage-labels.md`.
-
-### Domain docs
-This repo uses a single-context layout for domain docs. See `docs/agents/domain.md`.
+- **Tickets**: Tracer-bullet vertical slices located in `.scratch/headless-comments/issues/`.
+- **Execution**: Implement tickets sequentially (01 -> 19). Each ticket must be a testable vertical slice.
+- **Issue Tracker & Docs**: Local issues in `.scratch/` until GitHub remote is linked. See `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md`, and `docs/agents/domain.md`.
