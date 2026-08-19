@@ -17,10 +17,10 @@ describe("Auth API Seam Integration Tests", () => {
     await app.close();
   });
 
-  it("POST /auth/anonymous creates a guest user and returns access token", async () => {
+  it("POST /api/v1/auth/anonymous creates a guest user and returns access token", async () => {
     const response = await app.inject({
       method: "POST",
-      url: "/auth/anonymous",
+      url: "/api/v1/auth/anonymous",
     });
 
     expect(response.statusCode).toBe(200);
@@ -33,22 +33,10 @@ describe("Auth API Seam Integration Tests", () => {
     expect(body.user.id).toBeDefined();
   });
 
-  it("POST /api/v1/auth/anonymous alias also works", async () => {
-    const response = await app.inject({
-      method: "POST",
-      url: "/api/v1/auth/anonymous",
-    });
-
-    expect(response.statusCode).toBe(200);
-    const body = response.json();
-    expect(body.accessToken).toBeDefined();
-    expect(body.user.role).toBe("guest");
-  });
-
-  it("GET /auth/me returns 401 Unauthorized when missing token", async () => {
+  it("GET /api/v1/auth/me returns 401 Unauthorized when missing token", async () => {
     const response = await app.inject({
       method: "GET",
-      url: "/auth/me",
+      url: "/api/v1/auth/me",
     });
 
     expect(response.statusCode).toBe(401);
@@ -58,10 +46,10 @@ describe("Auth API Seam Integration Tests", () => {
     expect(body.title).toBe("Unauthorized");
   });
 
-  it("GET /auth/me returns 401 Unauthorized when token is invalid", async () => {
+  it("GET /api/v1/auth/me returns 401 Unauthorized when token is invalid", async () => {
     const response = await app.inject({
       method: "GET",
-      url: "/auth/me",
+      url: "/api/v1/auth/me",
       headers: {
         authorization: "Bearer invalid-token",
       },
@@ -71,18 +59,16 @@ describe("Auth API Seam Integration Tests", () => {
     expect(response.headers["content-type"]).toContain("application/problem+json");
   });
 
-  it("GET /auth/me returns user profile when valid bearer token is provided", async () => {
-    // 1. First get guest user
+  it("GET /api/v1/auth/me returns user profile when valid bearer token is provided", async () => {
     const anonRes = await app.inject({
       method: "POST",
-      url: "/auth/anonymous",
+      url: "/api/v1/auth/anonymous",
     });
     const { accessToken, user } = anonRes.json();
 
-    // 2. Fetch /auth/me with bearer token
     const meRes = await app.inject({
       method: "GET",
-      url: "/auth/me",
+      url: "/api/v1/auth/me",
       headers: {
         authorization: `Bearer ${accessToken}`,
       },
@@ -95,16 +81,16 @@ describe("Auth API Seam Integration Tests", () => {
     expect(meBody.status).toBe("active");
   });
 
-  it("GET /auth/me rejects cookie-based authentication on the public API", async () => {
+  it("GET /api/v1/auth/me rejects cookie-based authentication on the public API", async () => {
     const anonRes = await app.inject({
       method: "POST",
-      url: "/auth/anonymous",
+      url: "/api/v1/auth/anonymous",
     });
     const { accessToken } = anonRes.json();
 
     const meRes = await app.inject({
       method: "GET",
-      url: "/auth/me",
+      url: "/api/v1/auth/me",
       cookies: {
         auth_token: accessToken,
       },

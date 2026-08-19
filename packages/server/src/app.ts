@@ -150,7 +150,6 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     );
   };
 
-  app.post("/auth/anonymous", anonymousHandler);
   app.post("/api/v1/auth/anonymous", anonymousHandler);
 
   // Auth: Current user profile
@@ -158,7 +157,6 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     return reply.status(200).send(UserSchema.parse(request.user));
   };
 
-  app.get("/auth/me", { preHandler: authenticate }, meHandler);
   app.get("/api/v1/auth/me", { preHandler: authenticate }, meHandler);
 
   // Threads: GET by externalRef
