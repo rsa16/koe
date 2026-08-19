@@ -280,7 +280,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
       codeVerifier,
       GOOGLE_OAUTH_SCOPES
     );
-    const stateToken = signOAuthState({ state, codeVerifier, guestUserId }, jwtSecret);
+    const stateToken = await signOAuthState({ state, codeVerifier, guestUserId }, jwtSecret);
 
     reply.setCookie(OAUTH_STATE_COOKIE, stateToken, oauthStateCookieAttributes);
     return reply.redirect(authorizationUrl.toString());
@@ -303,7 +303,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     const { code, state } = queryParsed.data;
 
     const stateToken = request.cookies[OAUTH_STATE_COOKIE];
-    const oauthState = stateToken ? verifyOAuthState(stateToken, jwtSecret) : null;
+    const oauthState = stateToken ? await verifyOAuthState(stateToken, jwtSecret) : null;
 
     if (!oauthState || oauthState.state !== state) {
       clearStateCookie();

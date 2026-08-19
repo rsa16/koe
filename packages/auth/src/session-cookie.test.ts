@@ -9,33 +9,33 @@ describe("Session Cookie", () => {
   const secret = "test-cookie-secret-that-is-long-enough-32-chars";
   const userId = "123e4567-e89b-12d3-a456-426614174000";
 
-  it("signs and verifies a session value", () => {
-    const value = signSessionValue(userId, { secret });
+  it("signs and verifies a session value", async () => {
+    const value = await signSessionValue(userId, { secret });
 
-    expect(value.split(".").length).toBe(2);
-    expect(verifySessionValue(value, secret)).toBe(userId);
+    expect(value.split(".").length).toBe(3);
+    expect(await verifySessionValue(value, secret)).toBe(userId);
   });
 
-  it("rejects a tampered session value", () => {
-    const value = signSessionValue(userId, { secret });
-    const [payload] = value.split(".");
-    const forged = `${payload}.tampered-signature`;
+  it("rejects a tampered session value", async () => {
+    const value = await signSessionValue(userId, { secret });
+    const parts = value.split(".");
+    const forged = `${parts[0]}.${parts[1]}.tampered-signature`;
 
-    expect(verifySessionValue(forged, secret)).toBeNull();
+    expect(await verifySessionValue(forged, secret)).toBeNull();
   });
 
-  it("rejects a session value signed with a different secret", () => {
-    const value = signSessionValue(userId, { secret });
+  it("rejects a session value signed with a different secret", async () => {
+    const value = await signSessionValue(userId, { secret });
 
     expect(
-      verifySessionValue(value, "different-cookie-secret-also-long-enough")
+      await verifySessionValue(value, "different-cookie-secret-also-long-enough")
     ).toBeNull();
   });
 
-  it("rejects an expired session value", () => {
-    const value = signSessionValue(userId, { secret, maxAgeSeconds: -1 });
+  it("rejects an expired session value", async () => {
+    const value = await signSessionValue(userId, { secret, maxAgeSeconds: -1 });
 
-    expect(verifySessionValue(value, secret)).toBeNull();
+    expect(await verifySessionValue(value, secret)).toBeNull();
   });
 
   it("exposes SameSite=Lax HttpOnly cookie attributes for the admin UI", () => {
