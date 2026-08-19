@@ -98,6 +98,20 @@ export const AnonymousAuthResponseSchema = z.object({
 });
 export type AnonymousAuthResponse = z.infer<typeof AnonymousAuthResponseSchema>;
 
+export const OAuthStartQuerySchema = z.object({
+  guestUserId: z.string().uuid().optional(),
+});
+export type OAuthStartQuery = z.infer<typeof OAuthStartQuerySchema>;
+
+export const OAuthCallbackQuerySchema = z.object({
+  code: z.string().min(1),
+  state: z.string().min(1),
+});
+export type OAuthCallbackQuery = z.infer<typeof OAuthCallbackQuerySchema>;
+
+export const OAuthCallbackResponseSchema = AnonymousAuthResponseSchema;
+export type OAuthCallbackResponse = AnonymousAuthResponse;
+
 // Session schemas
 export const SessionSchema = z.object({
   id: z.string().uuid(),

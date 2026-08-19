@@ -1,5 +1,6 @@
 import { buildApp } from "./app.js";
 import { createDbClient } from "@koe/db";
+import { createGoogleOAuthProvider } from "./oauth.js";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -13,10 +14,20 @@ if (!jwtSecret) {
   throw new Error("JWT_SECRET must be set in the environment");
 }
 
+const googleClientId = process.env.GOOGLE_CLIENT_ID;
+const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+const googleRedirectURI = process.env.GOOGLE_REDIRECT_URI;
+const googleOAuth =
+  googleClientId && googleClientSecret && googleRedirectURI
+    ? createGoogleOAuthProvider(googleClientId, googleClientSecret, googleRedirectURI)
+    : undefined;
+
 const db = createDbClient(databaseUrl);
 const app = buildApp({
   db,
   jwtSecret,
+  googleOAuth,
+  clientOrigin: process.env.CLIENT_ORIGIN,
   logger: true,
 });
 
