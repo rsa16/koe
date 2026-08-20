@@ -159,4 +159,30 @@ describe("<koe-comments> widget", () => {
 
     expect(localStorage.getItem("koe_access_token")).toBe(storedToken);
   });
+
+  it("recovers from a stale stored token by re-authenticating before posting", async () => {
+    localStorage.setItem("koe_access_token", "bogus-token");
+    const element = mount("widget-stale-token");
+
+    await waitFor(() => element.shadowRoot?.querySelector(".empty") !== null);
+
+    const textarea = element.shadowRoot!.querySelector("textarea")!;
+    textarea.value = "Posted after stale token recovery";
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+
+    const form = element.shadowRoot!.querySelector("form")!;
+    form.dispatchEvent(
+      new Event("submit", { bubbles: true, cancelable: true })
+    );
+
+    await waitFor(() => {
+      const items = element.shadowRoot!.querySelectorAll(".comment");
+      return (
+        items.length === 1 &&
+        items[0].textContent?.includes("Posted after stale token recovery")
+      );
+    });
+
+    expect(localStorage.getItem("koe_access_token")).not.toBe("bogus-token");
+  });
 });

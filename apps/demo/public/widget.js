@@ -5042,12 +5042,30 @@ var KoeComments = class extends i4 {
   async ensureGuest() {
     const stored = localStorage.getItem(ACCESS_TOKEN_KEY);
     if (stored) {
-      this.token = stored;
-      return;
+      try {
+        await this.client.auth.me(stored);
+        this.token = stored;
+        return;
+      } catch {
+        localStorage.removeItem(ACCESS_TOKEN_KEY);
+      }
     }
     const response = await this.client.auth.anonymous();
     this.token = response.accessToken;
     localStorage.setItem(ACCESS_TOKEN_KEY, this.token);
+  }
+  async withAuthRetry(operation) {
+    try {
+      return await operation();
+    } catch (err) {
+      if (err instanceof KoeApiError && err.status === 401) {
+        localStorage.removeItem(ACCESS_TOKEN_KEY);
+        this.token = "";
+        await this.ensureGuest();
+        return await operation();
+      }
+      throw err;
+    }
   }
   async reloadComments() {
     if (!this.threadId) {
@@ -5072,13 +5090,15 @@ var KoeComments = class extends i4 {
     this.submitting = true;
     this.error = "";
     try {
-      await this.client.comments.create(
-        this.threadId,
-        {
-          bodyMd: body,
-          ...this.replyTo ? { parentId: this.replyTo } : {}
-        },
-        this.token
+      await this.withAuthRetry(
+        () => this.client.comments.create(
+          this.threadId,
+          {
+            bodyMd: body,
+            ...this.replyTo ? { parentId: this.replyTo } : {}
+          },
+          this.token
+        )
       );
       this.draft = "";
       this.replyTo = null;
@@ -5102,7 +5122,9 @@ var KoeComments = class extends i4 {
     this.voting = true;
     this.error = "";
     try {
-      await this.client.comments.vote(commentId, value, this.token);
+      await this.withAuthRetry(
+        () => this.client.comments.vote(commentId, value, this.token)
+      );
       await this.reloadComments();
     } catch (err) {
       this.error = err instanceof Error ? err.message : "Failed to vote";
@@ -5117,7 +5139,9 @@ var KoeComments = class extends i4 {
     this.reacting = true;
     this.error = "";
     try {
-      await this.client.comments.react(commentId, emoji, this.token);
+      await this.withAuthRetry(
+        () => this.client.comments.react(commentId, emoji, this.token)
+      );
       await this.reloadComments();
     } catch (err) {
       this.error = err instanceof Error ? err.message : "Failed to react";

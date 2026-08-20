@@ -1,4 +1,4 @@
-import { CommentNode, createKoeClient, DEFAULT_EMOJI_ALLOWLIST, KoeClient } from "@koe/sdk";
+import { CommentNode, createKoeClient, DEFAULT_EMOJI_ALLOWLIST, KoeApiError, KoeClient } from "@koe/sdk";
 import { html, LitElement, TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
@@ -88,12 +88,31 @@ export class KoeComments extends LitElement {
   private async ensureGuest() {
     const stored = localStorage.getItem(ACCESS_TOKEN_KEY);
     if (stored) {
-      this.token = stored;
-      return;
+      try {
+        await this.client!.auth.me(stored);
+        this.token = stored;
+        return;
+      } catch {
+        localStorage.removeItem(ACCESS_TOKEN_KEY);
+      }
     }
     const response = await this.client!.auth.anonymous();
     this.token = response.accessToken;
     localStorage.setItem(ACCESS_TOKEN_KEY, this.token);
+  }
+
+  private async withAuthRetry<T>(operation: () => Promise<T>): Promise<T> {
+    try {
+      return await operation();
+    } catch (err) {
+      if (err instanceof KoeApiError && err.status === 401) {
+        localStorage.removeItem(ACCESS_TOKEN_KEY);
+        this.token = "";
+        await this.ensureGuest();
+        return await operation();
+      }
+      throw err;
+    }
   }
 
   private async reloadComments() {
@@ -121,13 +140,15 @@ export class KoeComments extends LitElement {
     this.submitting = true;
     this.error = "";
     try {
-      await this.client!.comments.create(
-        this.threadId,
-        {
-          bodyMd: body,
-          ...(this.replyTo ? { parentId: this.replyTo } : {}),
-        },
-        this.token
+      await this.withAuthRetry(() =>
+        this.client!.comments.create(
+          this.threadId,
+          {
+            bodyMd: body,
+            ...(this.replyTo ? { parentId: this.replyTo } : {}),
+          },
+          this.token
+        )
       );
       this.draft = "";
       this.replyTo = null;
@@ -155,7 +176,9 @@ export class KoeComments extends LitElement {
     this.voting = true;
     this.error = "";
     try {
-      await this.client!.comments.vote(commentId, value, this.token);
+      await this.withAuthRetry(() =>
+        this.client!.comments.vote(commentId, value, this.token)
+      );
       await this.reloadComments();
     } catch (err) {
       this.error =
@@ -172,7 +195,9 @@ export class KoeComments extends LitElement {
     this.reacting = true;
     this.error = "";
     try {
-      await this.client!.comments.react(commentId, emoji, this.token);
+      await this.withAuthRetry(() =>
+        this.client!.comments.react(commentId, emoji, this.token)
+      );
       await this.reloadComments();
     } catch (err) {
       this.error =
