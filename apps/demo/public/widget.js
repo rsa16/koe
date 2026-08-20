@@ -4244,7 +4244,8 @@ var KoeApiError = class extends Error {
   }
 };
 function buildUrl(baseUrl, path, query) {
-  const url = new URL(path, baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`);
+  const normalizedBase = baseUrl ? baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/` : typeof window !== "undefined" ? `${window.location.origin}/` : "http://localhost/";
+  const url = new URL(path.startsWith("/") ? path.slice(1) : path, normalizedBase);
   if (query) {
     for (const [key, value] of Object.entries(query)) {
       if (value !== void 0) {
@@ -4995,8 +4996,9 @@ var KoeComments = class extends i4 {
   }
   connectedCallback() {
     super.connectedCallback();
-    if (this.baseUrl && this.threadRef) {
-      this.client = createKoeClient({ baseUrl: this.baseUrl });
+    if (this.threadRef) {
+      const effectiveBaseUrl = this.baseUrl || (typeof window !== "undefined" ? window.location.origin : "");
+      this.client = createKoeClient({ baseUrl: effectiveBaseUrl });
       void this.loadThread();
     }
   }

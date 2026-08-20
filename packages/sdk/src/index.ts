@@ -132,9 +132,17 @@ function buildUrl(
   path: string,
   query?: Record<string, string | number | undefined>
 ): string {
+  const normalizedBase = baseUrl
+    ? baseUrl.endsWith("/")
+      ? baseUrl
+      : `${baseUrl}/`
+    : typeof window !== "undefined"
+      ? `${window.location.origin}/`
+      : "http://localhost/";
+
   const url = new URL(
-    path,
-    baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`
+    path.startsWith("/") ? path.slice(1) : path,
+    normalizedBase
   );
   if (query) {
     for (const [key, value] of Object.entries(query)) {

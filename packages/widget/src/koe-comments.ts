@@ -226,8 +226,9 @@ export class KoeComments extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
-    if (this.baseUrl && this.threadRef) {
-      this.client = createKoeClient({ baseUrl: this.baseUrl });
+    if (this.threadRef) {
+      const effectiveBaseUrl = this.baseUrl || (typeof window !== "undefined" ? window.location.origin : "");
+      this.client = createKoeClient({ baseUrl: effectiveBaseUrl });
       void this.loadThread();
     }
   }
