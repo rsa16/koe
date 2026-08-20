@@ -6,6 +6,7 @@ export const userStatusEnum = pgEnum("user_status", ["active", "suspended", "ban
 export const identityProviderEnum = pgEnum("identity_provider", ["anonymous", "google", "github", "x"]);
 export const threadStatusEnum = pgEnum("thread_status", ["open", "closed", "locked"]);
 export const commentStatusEnum = pgEnum("comment_status", ["pending", "published", "spam", "deleted"]);
+export const reactionTargetTypeEnum = pgEnum("reaction_target_type", ["comment", "thread"]);
 
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -60,6 +61,7 @@ export const comments = pgTable("comments", {
   path: text("path").notNull().default(""),
   upvotes: integer("upvotes").notNull().default(0),
   downvotes: integer("downvotes").notNull().default(0),
+  reactionTotals: jsonb("reaction_totals").notNull().default({}),
   metadata: jsonb("metadata").notNull().default({}),
   editedAt: timestamp("edited_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -96,3 +98,26 @@ export const sessions = pgTable("sessions", {
 }, (table) => [
   index("idx_sessions_user_id").on(table.userId),
 ]);
+
+export const reactions = pgTable(
+  "reactions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    targetType: reactionTargetTypeEnum("target_type").notNull(),
+    targetId: uuid("target_id").notNull(),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    emoji: text("emoji").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("idx_reactions_target_user_emoji").on(
+      table.targetType,
+      table.targetId,
+      table.userId,
+      table.emoji
+    ),
+    index("idx_reactions_target_id").on(table.targetType, table.targetId),
+    index("idx_reactions_user_id").on(table.userId),
+  ]
+);

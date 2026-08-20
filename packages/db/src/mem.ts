@@ -12,6 +12,7 @@ export async function createMemDb() {
     CREATE TYPE identity_provider AS ENUM ('anonymous', 'google', 'github', 'x');
     CREATE TYPE thread_status AS ENUM ('open', 'closed', 'locked');
     CREATE TYPE comment_status AS ENUM ('pending', 'published', 'spam', 'deleted');
+    CREATE TYPE reaction_target_type AS ENUM ('comment', 'thread');
 
     CREATE TABLE users (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -61,6 +62,7 @@ export async function createMemDb() {
       path TEXT NOT NULL DEFAULT '',
       upvotes INTEGER NOT NULL DEFAULT 0,
       downvotes INTEGER NOT NULL DEFAULT 0,
+      reaction_totals JSONB NOT NULL DEFAULT '{}'::jsonb,
       metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
       edited_at TIMESTAMPTZ,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -85,6 +87,20 @@ export async function createMemDb() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+
+    CREATE TABLE reactions (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      target_type reaction_target_type NOT NULL,
+      target_id UUID NOT NULL,
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      emoji TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (target_type, target_id, user_id, emoji)
+    );
+
+    CREATE INDEX idx_reactions_target_id ON reactions (target_type, target_id);
+    CREATE INDEX idx_reactions_user_id ON reactions (user_id);
   `);
 
   const db = drizzle(client, { schema });

@@ -7,7 +7,10 @@ import {
   CommentListResponseSchema,
   CommentSchema,
   CreateCommentBody,
+  DEFAULT_EMOJI_ALLOWLIST,
   GetThreadByRefQuery,
+  Reaction,
+  ReactionSchema,
   Thread,
   ThreadSchema,
   User,
@@ -26,11 +29,15 @@ export type {
   CommentNode,
   CreateCommentBody,
   GetThreadByRefQuery,
+  Reaction,
+  ReactionTotals,
   Thread,
   User,
   Vote,
   VoteValue,
 } from "@koe/core";
+
+export { DEFAULT_EMOJI_ALLOWLIST } from "@koe/core";
 
 export interface KoeApiErrorOptions {
   status: number;
@@ -89,6 +96,12 @@ export interface KoeClient {
       token?: string
     ): Promise<Vote | null>;
     unvote(commentId: string, token?: string): Promise<void>;
+    react(
+      commentId: string,
+      emoji: string,
+      token?: string
+    ): Promise<Reaction | null>;
+    unreact(commentId: string, emoji: string, token?: string): Promise<void>;
   };
 }
 
@@ -212,6 +225,21 @@ export function createKoeClient(options: KoeClientOptions): KoeClient {
           method: "DELETE",
           token,
         });
+      },
+      react: async (commentId, emoji, token) => {
+        const result = await request(
+          ReactionSchema,
+          `/api/v1/comments/${commentId}/reactions`,
+          { method: "POST", body: { emoji }, token }
+        );
+        return result ?? null;
+      },
+      unreact: async (commentId, emoji, token) => {
+        await request(
+          ReactionSchema,
+          `/api/v1/comments/${commentId}/reactions/${encodeURIComponent(emoji)}`,
+          { method: "DELETE", token }
+        );
       },
     },
   };

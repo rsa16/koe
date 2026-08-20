@@ -1,12 +1,9 @@
-import {
-  CreateVoteBodySchema,
-  VoteParamsSchema,
-  VoteSchema,
-  VoteValue,
-} from "@koe/core";
+import { CreateVoteBodySchema, VoteSchema, VoteValue } from "@koe/core";
 import { comments, Database, votes } from "@koe/db";
 import { and, eq, sql } from "drizzle-orm";
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { commentExists, parseCommentIdParam } from "../comment-scoped.js";
+import { withUniqueViolationRetry } from "../unique.js";
 
 export interface VotesRoutesOptions {
   db: Database;
@@ -29,47 +26,11 @@ function deltasFor(previous: VoteValue | null, next: VoteValue | null): VoteDelt
   };
 }
 
-function isUniqueViolation(err: unknown): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    (err as { code?: string }).code === "23505"
-  );
-}
-
 export default async function votesRoutes(
   app: FastifyInstance,
   options: VotesRoutesOptions
 ) {
   const { db } = options;
-
-  function validateParams(
-    request: FastifyRequest,
-    reply: FastifyReply
-  ): ReturnType<typeof VoteParamsSchema.safeParse>["data"] | undefined {
-    const parsed = VoteParamsSchema.safeParse(request.params);
-    if (!parsed.success) {
-      app.sendProblem(
-        reply,
-        400,
-        "Bad Request",
-        "Invalid comment identifier parameter",
-        request.url,
-        parsed.error.issues
-      );
-      return undefined;
-    }
-    return parsed.data;
-  }
-
-  async function commentExists(commentId: string): Promise<boolean> {
-    const found = await db
-      .select()
-      .from(comments)
-      .where(eq(comments.id, commentId))
-      .limit(1);
-    return found.length > 0;
-  }
 
   async function applyVoteDelta(
     tx: Database,
@@ -92,8 +53,8 @@ export default async function votesRoutes(
     request: FastifyRequest,
     reply: FastifyReply
   ) => {
-    const params = validateParams(request, reply);
-    if (!params) {
+    const commentId = parseCommentIdParam(app, request, reply);
+    if (!commentId) {
       return;
     }
 
@@ -109,10 +70,9 @@ export default async function votesRoutes(
       );
     }
 
-    const commentId = params.id;
     const userId = request.user!.id;
 
-    if (!(await commentExists(commentId))) {
+    if (!(await commentExists(db, commentId))) {
       return app.sendProblem(
         reply,
         404,
@@ -127,57 +87,47 @@ export default async function votesRoutes(
     // Concurrent duplicate votes can race the unique (comment_id, user_id)
     // index; retry once so the loser resolves to a toggle or switch instead
     // of surfacing a unique-violation as a 500.
-    let result: VoteResult;
-    for (let attempt = 1; ; attempt++) {
-      try {
-        result = await db.transaction(async (tx: Database) => {
-          const existing = await tx
-            .select()
-            .from(votes)
-            .where(
-              and(eq(votes.commentId, commentId), eq(votes.userId, userId))
-            )
-            .limit(1);
+    const result = await withUniqueViolationRetry(async () =>
+      db.transaction(async (tx: Database) => {
+        const existing = await tx
+          .select()
+          .from(votes)
+          .where(and(eq(votes.commentId, commentId), eq(votes.userId, userId)))
+          .limit(1);
 
-          if (existing.length === 0) {
-            const [vote] = await tx
-              .insert(votes)
-              .values({ commentId, userId, value })
-              .returning();
-            await applyVoteDelta(tx, commentId, deltasFor(null, value));
-            return { status: 201, vote };
-          }
-
-          const current = existing[0];
-          if (current.value === value) {
-            await tx.delete(votes).where(eq(votes.id, current.id));
-            await applyVoteDelta(
-              tx,
-              commentId,
-              deltasFor(current.value as VoteValue, null)
-            );
-            return { status: 204, vote: null };
-          }
-
+        if (existing.length === 0) {
           const [vote] = await tx
-            .update(votes)
-            .set({ value, updatedAt: new Date() })
-            .where(eq(votes.id, current.id))
+            .insert(votes)
+            .values({ commentId, userId, value })
             .returning();
+          await applyVoteDelta(tx, commentId, deltasFor(null, value));
+          return { status: 201, vote };
+        }
+
+        const current = existing[0];
+        if (current.value === value) {
+          await tx.delete(votes).where(eq(votes.id, current.id));
           await applyVoteDelta(
             tx,
             commentId,
-            deltasFor(current.value as VoteValue, value)
+            deltasFor(current.value as VoteValue, null)
           );
-          return { status: 200, vote };
-        });
-        break;
-      } catch (err) {
-        if (attempt >= 2 || !isUniqueViolation(err)) {
-          throw err;
+          return { status: 204, vote: null };
         }
-      }
-    }
+
+        const [vote] = await tx
+          .update(votes)
+          .set({ value, updatedAt: new Date() })
+          .where(eq(votes.id, current.id))
+          .returning();
+        await applyVoteDelta(
+          tx,
+          commentId,
+          deltasFor(current.value as VoteValue, value)
+        );
+        return { status: 200, vote };
+      })
+    );
 
     if (result.status === 204) {
       return reply.status(204).send();
@@ -191,15 +141,14 @@ export default async function votesRoutes(
     request: FastifyRequest,
     reply: FastifyReply
   ) => {
-    const params = validateParams(request, reply);
-    if (!params) {
+    const commentId = parseCommentIdParam(app, request, reply);
+    if (!commentId) {
       return;
     }
 
-    const commentId = params.id;
     const userId = request.user!.id;
 
-    if (!(await commentExists(commentId))) {
+    if (!(await commentExists(db, commentId))) {
       return app.sendProblem(
         reply,
         404,
@@ -213,9 +162,7 @@ export default async function votesRoutes(
       const existing = await tx
         .select()
         .from(votes)
-        .where(
-          and(eq(votes.commentId, commentId), eq(votes.userId, userId))
-        )
+        .where(and(eq(votes.commentId, commentId), eq(votes.userId, userId)))
         .limit(1);
 
       if (existing.length === 0) {

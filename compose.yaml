@@ -37,6 +37,7 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgres://postgres:postgres@db:5432/koe}
       PORT: ${PORT:-3000}
       HOST: ${HOST:-0.0.0.0}
+      REACTION_ALLOWLIST: ${REACTION_ALLOWLIST:-}
     ports:
       - "${PORT:-3000}:3000"
     depends_on:

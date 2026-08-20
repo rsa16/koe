@@ -14,6 +14,14 @@ if (!jwtSecret) {
   throw new Error("JWT_SECRET must be set in the environment");
 }
 
+const reactionAllowlistEnv = process.env.REACTION_ALLOWLIST;
+const reactionAllowlist = reactionAllowlistEnv
+  ? reactionAllowlistEnv
+      .split(",")
+      .map((emoji) => emoji.trim())
+      .filter(Boolean)
+  : undefined;
+
 const googleClientId = process.env.GOOGLE_CLIENT_ID;
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
 const googleRedirectURI = process.env.GOOGLE_REDIRECT_URI;
@@ -28,6 +36,7 @@ const app = buildApp({
   jwtSecret,
   googleOAuth,
   clientOrigin: process.env.CLIENT_ORIGIN,
+  reactionAllowlist,
   logger: true,
 });
 

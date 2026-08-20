@@ -5,7 +5,7 @@ import {
   CreateCommentBodySchema,
   CreateCommentParamsSchema,
 } from "@koe/core";
-import { comments, Database, threads, votes } from "@koe/db";
+import { comments, Database, reactions, threads, votes } from "@koe/db";
 import { renderMarkdown } from "@koe/renderer";
 import { and, eq, gt, inArray, sql } from "drizzle-orm";
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
@@ -194,6 +194,7 @@ export default async function commentsRoutes(
       .orderBy(comments.createdAt, comments.id);
 
     let userVotes: Map<string, 1 | -1> | undefined;
+    let userReactions: Map<string, string[]> | undefined;
     if (request.user) {
       const pageIds = [...roots, ...descendants].map((row) => row.id);
       const voteRows: typeof votes.$inferSelect[] = await db
@@ -208,9 +209,32 @@ export default async function commentsRoutes(
       userVotes = new Map(
         voteRows.map((vote) => [vote.commentId, vote.value as 1 | -1])
       );
+
+      const reactionRows: typeof reactions.$inferSelect[] = await db
+        .select()
+        .from(reactions)
+        .where(
+          and(
+            eq(reactions.targetType, "comment"),
+            eq(reactions.userId, request.user.id),
+            inArray(reactions.targetId, pageIds)
+          )
+        );
+      userReactions = new Map();
+      for (const row of reactionRows) {
+        const list = userReactions.get(row.targetId);
+        if (list) {
+          list.push(row.emoji);
+        } else {
+          userReactions.set(row.targetId, [row.emoji]);
+        }
+      }
     }
 
-    const tree = buildCommentTree([...roots, ...descendants], userVotes);
+    const tree = buildCommentTree([...roots, ...descendants], {
+      userVotes,
+      userReactions,
+    });
 
     return reply
       .status(200)
@@ -240,18 +264,25 @@ type CommentRow = typeof comments.$inferSelect;
 interface CommentTreeNode extends CommentRow {
   children: CommentTreeNode[];
   userVote: 1 | -1 | null;
+  userReactions: string[];
+}
+
+interface UserState {
+  userVotes?: Map<string, 1 | -1>;
+  userReactions?: Map<string, string[]>;
 }
 
 function buildCommentTree(
   rows: CommentRow[],
-  userVotes?: Map<string, 1 | -1>
+  userState?: UserState
 ): CommentTreeNode[] {
   const byParent = new Map<string | null, CommentTreeNode[]>();
   for (const row of rows) {
     const node: CommentTreeNode = {
       ...row,
       children: [],
-      userVote: userVotes?.get(row.id) ?? null,
+      userVote: userState?.userVotes?.get(row.id) ?? null,
+      userReactions: userState?.userReactions?.get(row.id) ?? [],
     };
     const siblings = byParent.get(node.parentId);
     if (siblings) {

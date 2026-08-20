@@ -75,6 +75,16 @@ const vote = {
   updatedAt: ISO_DATE,
 };
 
+const reaction = {
+  id: "623e4567-e89b-12d3-a456-426614174000",
+  targetType: "comment",
+  targetId: comment.id,
+  userId: guestUser.id,
+  emoji: "👍",
+  createdAt: ISO_DATE,
+  updatedAt: ISO_DATE,
+};
+
 interface RecordedRequest {
   url: string;
   init: RequestInit;
@@ -279,6 +289,70 @@ describe("Koe SDK Contract Tests", () => {
     expect(calls[0].init.headers).toMatchObject({
       authorization: "Bearer some-token",
     });
+  });
+
+  it("comments.react posts the emoji and parses the reaction", async () => {
+    const { fetchFn, calls } = mockFetch(() => ({
+      status: 201,
+      body: reaction,
+    }));
+    const client = createKoeClient({ baseUrl: "http://localhost:3000", fetch: fetchFn });
+
+    const result = await client.comments.react(comment.id, "👍", "some-token");
+
+    expect(calls[0].url).toBe(
+      `http://localhost:3000/api/v1/comments/${comment.id}/reactions`
+    );
+    expect(calls[0].init.method).toBe("POST");
+    expect(calls[0].init.headers).toMatchObject({
+      authorization: "Bearer some-token",
+      "content-type": "application/json",
+    });
+    expect(JSON.parse(String(calls[0].init.body))).toEqual({ emoji: "👍" });
+    expect(result?.emoji).toBe("👍");
+    expect(result?.targetId).toBe(comment.id);
+    expect(result?.createdAt).toBeInstanceOf(Date);
+  });
+
+  it("comments.react returns null when the reaction is toggled off (204)", async () => {
+    const { fetchFn } = mockFetch(() => ({ status: 204, body: null }));
+    const client = createKoeClient({ baseUrl: "http://localhost:3000", fetch: fetchFn });
+
+    const result = await client.comments.react(comment.id, "👍", "some-token");
+
+    expect(result).toBeNull();
+  });
+
+  it("comments.unreact deletes the reaction with an encoded emoji", async () => {
+    const { fetchFn, calls } = mockFetch(() => ({ status: 204, body: null }));
+    const client = createKoeClient({ baseUrl: "http://localhost:3000", fetch: fetchFn });
+
+    await client.comments.unreact(comment.id, "👍", "some-token");
+
+    expect(calls[0].url).toBe(
+      `http://localhost:3000/api/v1/comments/${comment.id}/reactions/%F0%9F%91%8D`
+    );
+    expect(calls[0].init.method).toBe("DELETE");
+    expect(calls[0].init.headers).toMatchObject({
+      authorization: "Bearer some-token",
+    });
+  });
+
+  it("comments.list parses the current user's reaction state per node", async () => {
+    const { fetchFn } = mockFetch(() => ({
+      status: 200,
+      body: {
+        comments: [{ ...comment, userReactions: ["👍"], children: [] }],
+        total: 1,
+        page: 1,
+        pageSize: 20,
+      },
+    }));
+    const client = createKoeClient({ baseUrl: "http://localhost:3000", fetch: fetchFn });
+
+    const result = await client.comments.list(thread.id);
+
+    expect(result.comments[0].userReactions).toEqual(["👍"]);
   });
 
   it("comments.list parses the current user's vote state per node", async () => {

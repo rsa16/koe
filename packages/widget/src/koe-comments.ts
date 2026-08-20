@@ -1,4 +1,4 @@
-import { CommentNode, createKoeClient, KoeClient } from "@koe/sdk";
+import { CommentNode, createKoeClient, DEFAULT_EMOJI_ALLOWLIST, KoeClient } from "@koe/sdk";
 import { css, html, LitElement, TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
@@ -140,6 +140,43 @@ export class KoeComments extends LitElement {
       color: var(--koe-text, #1a1a1a);
     }
 
+    .reaction-list {
+      display: inline-flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-top: 6px;
+      margin-right: 8px;
+    }
+
+    .reaction-button {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border: 1px solid var(--koe-border, #ccc);
+      border-radius: 999px;
+      background: transparent;
+      color: var(--koe-text, #1a1a1a);
+      font: inherit;
+      font-size: 0.8em;
+      cursor: pointer;
+    }
+
+    .reaction-button.active {
+      background: var(--koe-reaction-active, #dbeafe);
+      border-color: var(--koe-accent, #2563eb);
+      font-weight: bold;
+    }
+
+    .reaction-count {
+      font-size: 0.85em;
+      color: var(--koe-muted, #666);
+    }
+
+    .reaction-button.active .reaction-count {
+      color: var(--koe-accent, #2563eb);
+    }
+
     .reply-target {
       margin: 0;
       font-size: 0.8em;
@@ -162,17 +199,30 @@ export class KoeComments extends LitElement {
   @property({ type: String, attribute: "thread-ref" })
   threadRef = "";
 
+  @property({ type: String, attribute: "reaction-emojis" })
+  reactionEmojis = "";
+
   @state() private comments: CommentNode[] = [];
   @state() private threadId = "";
   @state() private loading = true;
   @state() private submitting = false;
   @state() private voting = false;
+  @state() private reacting = false;
   @state() private draft = "";
   @state() private replyTo: string | null = null;
   @state() private error = "";
 
   private client: KoeClient | null = null;
   private token = "";
+
+  private get emojis(): string[] {
+    return this.reactionEmojis
+      ? this.reactionEmojis
+          .split(",")
+          .map((emoji) => emoji.trim())
+          .filter(Boolean)
+      : DEFAULT_EMOJI_ALLOWLIST;
+  }
 
   connectedCallback() {
     super.connectedCallback();
@@ -278,6 +328,23 @@ export class KoeComments extends LitElement {
     }
   }
 
+  private async reactToComment(commentId: string, emoji: string) {
+    if (!this.threadId || this.reacting) {
+      return;
+    }
+    this.reacting = true;
+    this.error = "";
+    try {
+      await this.client!.comments.react(commentId, emoji, this.token);
+      await this.reloadComments();
+    } catch (err) {
+      this.error =
+        err instanceof Error ? err.message : "Failed to react";
+    } finally {
+      this.reacting = false;
+    }
+  }
+
   protected render() {
     return html`
       <section class="koe-comments">
@@ -357,6 +424,24 @@ export class KoeComments extends LitElement {
           >
             ▼
           </button>
+        </div>
+        <div class="reaction-list">
+          ${this.emojis.map((emoji) => {
+            const count = comment.reactionTotals?.[emoji] ?? 0;
+            const active = comment.userReactions?.includes(emoji) ?? false;
+            return html`
+              <button
+                type="button"
+                class="reaction-button ${active ? "active" : ""}"
+                ?disabled=${this.reacting}
+                @click=${() => this.reactToComment(comment.id, emoji)}
+                aria-label=${`React with ${emoji}`}
+                aria-pressed=${active}
+              >
+                ${emoji}<span class="reaction-count">${count}</span>
+              </button>
+            `;
+          })}
         </div>
         <button
           type="button"
