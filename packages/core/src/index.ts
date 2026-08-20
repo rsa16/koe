@@ -71,6 +71,33 @@ export const GetThreadByRefQuerySchema = z.object({
 });
 export type GetThreadByRefQuery = z.infer<typeof GetThreadByRefQuerySchema>;
 
+// Vote schemas
+export const VoteValueSchema = z.union([z.literal(1), z.literal(-1)]);
+export type VoteValue = z.infer<typeof VoteValueSchema>;
+
+export const IdParamSchema = z.object({
+  id: z.string().uuid(),
+});
+export type IdParam = z.infer<typeof IdParamSchema>;
+
+export const VoteSchema = z.object({
+  id: z.string().uuid(),
+  commentId: z.string().uuid(),
+  userId: z.string().uuid(),
+  value: VoteValueSchema,
+  createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
+});
+export type Vote = z.infer<typeof VoteSchema>;
+
+export const VoteParamsSchema = IdParamSchema;
+export type VoteParams = IdParam;
+
+export const CreateVoteBodySchema = z.object({
+  value: VoteValueSchema,
+});
+export type CreateVoteBody = z.infer<typeof CreateVoteBodySchema>;
+
 // Comment schemas
 export const COMMENT_DEPTH_CAP = 4;
 
@@ -93,16 +120,18 @@ export const CommentSchema = z.object({
 });
 export type Comment = z.infer<typeof CommentSchema>;
 
-export type CommentNode = Comment & { children: CommentNode[] };
+export type CommentNode = Comment & {
+  children: CommentNode[];
+  userVote: VoteValue | null;
+};
 export const CommentNodeSchema: z.ZodType<CommentNode, z.ZodTypeDef, unknown> =
   CommentSchema.extend({
     children: z.lazy(() => z.array(CommentNodeSchema)),
+    userVote: VoteValueSchema.nullable().default(null),
   });
 
-export const CreateCommentParamsSchema = z.object({
-  id: z.string().uuid(),
-});
-export type CreateCommentParams = z.infer<typeof CreateCommentParamsSchema>;
+export const CreateCommentParamsSchema = IdParamSchema;
+export type CreateCommentParams = IdParam;
 
 export const CreateCommentBodySchema = z.object({
   bodyMd: z.string().min(1).max(10000),

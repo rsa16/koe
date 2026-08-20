@@ -1,4 +1,5 @@
-import { pgTable, uuid, text, timestamp, boolean, integer, jsonb, pgEnum, index } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, boolean, integer, jsonb, pgEnum, index, uniqueIndex, check } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 export const userRoleEnum = pgEnum("user_role", ["guest", "member", "moderator", "admin"]);
 export const userStatusEnum = pgEnum("user_status", ["active", "suspended", "banned"]);
@@ -68,6 +69,22 @@ export const comments = pgTable("comments", {
   index("idx_comments_parent_id").on(table.parentId),
   index("idx_comments_author_id").on(table.authorId),
 ]);
+
+export const votes = pgTable(
+  "votes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    commentId: uuid("comment_id").notNull().references(() => comments.id, { onDelete: "cascade" }),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    value: integer("value").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("idx_votes_comment_user").on(table.commentId, table.userId),
+    check("votes_value_check", sql`${table.value} IN (1, -1)`),
+  ]
+);
 
 export const sessions = pgTable("sessions", {
   id: uuid("id").primaryKey().defaultRandom(),

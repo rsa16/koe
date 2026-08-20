@@ -107,6 +107,39 @@ export class KoeComments extends LitElement {
       cursor: pointer;
     }
 
+    .vote-controls {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      margin-top: 6px;
+      margin-right: 8px;
+    }
+
+    .vote-button {
+      padding: 2px 8px;
+      border: 1px solid var(--koe-border, #ccc);
+      border-radius: 4px;
+      background: transparent;
+      color: var(--koe-muted, #666);
+      font: inherit;
+      font-size: 0.8em;
+      cursor: pointer;
+    }
+
+    .vote-button.active {
+      color: var(--koe-accent, #2563eb);
+      border-color: var(--koe-accent, #2563eb);
+      font-weight: bold;
+    }
+
+    .vote-score {
+      min-width: 24px;
+      text-align: center;
+      font-size: 0.8em;
+      font-weight: bold;
+      color: var(--koe-text, #1a1a1a);
+    }
+
     .reply-target {
       margin: 0;
       font-size: 0.8em;
@@ -133,6 +166,7 @@ export class KoeComments extends LitElement {
   @state() private threadId = "";
   @state() private loading = true;
   @state() private submitting = false;
+  @state() private voting = false;
   @state() private draft = "";
   @state() private replyTo: string | null = null;
   @state() private error = "";
@@ -179,7 +213,11 @@ export class KoeComments extends LitElement {
     if (!this.threadId) {
       return;
     }
-    const list = await this.client!.comments.list(this.threadId);
+    const list = await this.client!.comments.list(
+      this.threadId,
+      undefined,
+      this.token
+    );
     this.comments = list.comments;
   }
 
@@ -221,6 +259,23 @@ export class KoeComments extends LitElement {
 
   private cancelReply() {
     this.replyTo = null;
+  }
+
+  private async voteComment(commentId: string, value: 1 | -1) {
+    if (!this.threadId || this.voting) {
+      return;
+    }
+    this.voting = true;
+    this.error = "";
+    try {
+      await this.client!.comments.vote(commentId, value, this.token);
+      await this.reloadComments();
+    } catch (err) {
+      this.error =
+        err instanceof Error ? err.message : "Failed to vote";
+    } finally {
+      this.voting = false;
+    }
   }
 
   protected render() {
@@ -282,6 +337,27 @@ export class KoeComments extends LitElement {
             : ""}
           Guest · ${new Date(comment.createdAt).toLocaleString()}
         </p>
+        <div class="vote-controls">
+          <button
+            type="button"
+            class="vote-button ${comment.userVote === 1 ? "active" : ""}"
+            ?disabled=${this.voting}
+            @click=${() => this.voteComment(comment.id, 1)}
+            aria-label="Upvote"
+          >
+            ▲
+          </button>
+          <span class="vote-score">${comment.upvotes - comment.downvotes}</span>
+          <button
+            type="button"
+            class="vote-button ${comment.userVote === -1 ? "active" : ""}"
+            ?disabled=${this.voting}
+            @click=${() => this.voteComment(comment.id, -1)}
+            aria-label="Downvote"
+          >
+            ▼
+          </button>
+        </div>
         <button
           type="button"
           class="reply-button"

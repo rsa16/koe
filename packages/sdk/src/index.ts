@@ -12,6 +12,9 @@ import {
   ThreadSchema,
   User,
   UserSchema,
+  Vote,
+  VoteSchema,
+  VoteValue,
 } from "@koe/core";
 import { ZodTypeAny, z } from "zod";
 
@@ -25,6 +28,8 @@ export type {
   GetThreadByRefQuery,
   Thread,
   User,
+  Vote,
+  VoteValue,
 } from "@koe/core";
 
 export interface KoeApiErrorOptions {
@@ -78,6 +83,12 @@ export interface KoeClient {
       body: CreateCommentBody,
       token?: string
     ): Promise<Comment>;
+    vote(
+      commentId: string,
+      value: VoteValue,
+      token?: string
+    ): Promise<Vote | null>;
+    unvote(commentId: string, token?: string): Promise<void>;
   };
 }
 
@@ -150,6 +161,10 @@ export function createKoeClient(options: KoeClientOptions): KoeClient {
       });
     }
 
+    if (response.status === 204) {
+      return undefined as unknown as z.output<S>;
+    }
+
     const data: unknown = await response.json();
     return schema.parse(data);
   }
@@ -184,6 +199,20 @@ export function createKoeClient(options: KoeClientOptions): KoeClient {
           body,
           token,
         }),
+      vote: async (commentId, value, token) => {
+        const result = await request(
+          VoteSchema,
+          `/api/v1/comments/${commentId}/vote`,
+          { method: "POST", body: { value }, token }
+        );
+        return result ?? null;
+      },
+      unvote: async (commentId, token) => {
+        await request(VoteSchema, `/api/v1/comments/${commentId}/vote`, {
+          method: "DELETE",
+          token,
+        });
+      },
     },
   };
 }

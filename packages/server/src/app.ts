@@ -12,6 +12,7 @@ import healthRoutes from "./routes/health.js";
 import authRoutes from "./routes/auth.js";
 import threadsRoutes from "./routes/threads.js";
 import commentsRoutes from "./routes/comments.js";
+import votesRoutes from "./routes/votes.js";
 
 export interface BuildAppOptions {
   db: Database;
@@ -48,6 +49,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   });
   app.register(threadsRoutes, { db: options.db });
   app.register(commentsRoutes, { db: options.db });
+  app.register(votesRoutes, { db: options.db });
 
   return app;
 }

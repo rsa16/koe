@@ -5,9 +5,9 @@ import {
   CreateCommentBodySchema,
   CreateCommentParamsSchema,
 } from "@koe/core";
-import { comments, Database, threads } from "@koe/db";
+import { comments, Database, threads, votes } from "@koe/db";
 import { renderMarkdown } from "@koe/renderer";
-import { and, eq, gt, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, sql } from "drizzle-orm";
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { computeReplyPosition } from "../replies.js";
 
@@ -193,7 +193,24 @@ export default async function commentsRoutes(
       .where(and(eq(comments.threadId, threadId), gt(comments.depth, 0)))
       .orderBy(comments.createdAt, comments.id);
 
-    const tree = buildCommentTree([...roots, ...descendants]);
+    let userVotes: Map<string, 1 | -1> | undefined;
+    if (request.user) {
+      const pageIds = [...roots, ...descendants].map((row) => row.id);
+      const voteRows: typeof votes.$inferSelect[] = await db
+        .select()
+        .from(votes)
+        .where(
+          and(
+            eq(votes.userId, request.user.id),
+            inArray(votes.commentId, pageIds)
+          )
+        );
+      userVotes = new Map(
+        voteRows.map((vote) => [vote.commentId, vote.value as 1 | -1])
+      );
+    }
+
+    const tree = buildCommentTree([...roots, ...descendants], userVotes);
 
     return reply
       .status(200)
@@ -212,18 +229,30 @@ export default async function commentsRoutes(
     { preHandler: app.authenticate },
     createCommentHandler
   );
-  app.get("/api/v1/threads/:id/comments", listCommentsHandler);
+  app.get(
+    "/api/v1/threads/:id/comments",
+    { preHandler: app.authenticateOptional },
+    listCommentsHandler
+  );
 }
 
 type CommentRow = typeof comments.$inferSelect;
 interface CommentTreeNode extends CommentRow {
   children: CommentTreeNode[];
+  userVote: 1 | -1 | null;
 }
 
-function buildCommentTree(rows: CommentRow[]): CommentTreeNode[] {
+function buildCommentTree(
+  rows: CommentRow[],
+  userVotes?: Map<string, 1 | -1>
+): CommentTreeNode[] {
   const byParent = new Map<string | null, CommentTreeNode[]>();
   for (const row of rows) {
-    const node: CommentTreeNode = { ...row, children: [] };
+    const node: CommentTreeNode = {
+      ...row,
+      children: [],
+      userVote: userVotes?.get(row.id) ?? null,
+    };
     const siblings = byParent.get(node.parentId);
     if (siblings) {
       siblings.push(node);

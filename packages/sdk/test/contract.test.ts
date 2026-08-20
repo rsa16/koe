@@ -66,6 +66,15 @@ const createdReply = {
   updatedAt: ISO_DATE,
 };
 
+const vote = {
+  id: "523e4567-e89b-12d3-a456-426614174000",
+  commentId: comment.id,
+  userId: guestUser.id,
+  value: 1,
+  createdAt: ISO_DATE,
+  updatedAt: ISO_DATE,
+};
+
 interface RecordedRequest {
   url: string;
   init: RequestInit;
@@ -80,10 +89,13 @@ function mockFetch(
     const resolvedInit = init ?? {};
     calls.push({ url, init: resolvedInit });
     const result = handler(url, resolvedInit);
-    return new Response(JSON.stringify(result.body), {
-      status: result.status,
-      headers: { "content-type": "application/json" },
-    });
+    return new Response(
+      result.status === 204 ? null : JSON.stringify(result.body),
+      {
+        status: result.status,
+        headers: { "content-type": "application/json" },
+      }
+    );
   };
   return { fetchFn, calls };
 }
@@ -223,6 +235,67 @@ describe("Koe SDK Contract Tests", () => {
       parentId: comment.id,
     });
     expect(result.parentId).toBe(comment.id);
+  });
+
+  it("comments.vote posts the vote value and parses the vote", async () => {
+    const { fetchFn, calls } = mockFetch(() => ({ status: 201, body: vote }));
+    const client = createKoeClient({ baseUrl: "http://localhost:3000", fetch: fetchFn });
+
+    const result = await client.comments.vote(comment.id, 1, "some-token");
+
+    expect(calls[0].url).toBe(
+      `http://localhost:3000/api/v1/comments/${comment.id}/vote`
+    );
+    expect(calls[0].init.method).toBe("POST");
+    expect(calls[0].init.headers).toMatchObject({
+      authorization: "Bearer some-token",
+      "content-type": "application/json",
+    });
+    expect(JSON.parse(String(calls[0].init.body))).toEqual({ value: 1 });
+    expect(result?.commentId).toBe(comment.id);
+    expect(result?.value).toBe(1);
+    expect(result?.createdAt).toBeInstanceOf(Date);
+  });
+
+  it("comments.vote returns null when the vote is toggled off (204)", async () => {
+    const { fetchFn } = mockFetch(() => ({ status: 204, body: null }));
+    const client = createKoeClient({ baseUrl: "http://localhost:3000", fetch: fetchFn });
+
+    const result = await client.comments.vote(comment.id, 1, "some-token");
+
+    expect(result).toBeNull();
+  });
+
+  it("comments.unvote deletes the current user's vote", async () => {
+    const { fetchFn, calls } = mockFetch(() => ({ status: 204, body: null }));
+    const client = createKoeClient({ baseUrl: "http://localhost:3000", fetch: fetchFn });
+
+    await client.comments.unvote(comment.id, "some-token");
+
+    expect(calls[0].url).toBe(
+      `http://localhost:3000/api/v1/comments/${comment.id}/vote`
+    );
+    expect(calls[0].init.method).toBe("DELETE");
+    expect(calls[0].init.headers).toMatchObject({
+      authorization: "Bearer some-token",
+    });
+  });
+
+  it("comments.list parses the current user's vote state per node", async () => {
+    const { fetchFn } = mockFetch(() => ({
+      status: 200,
+      body: {
+        comments: [{ ...comment, userVote: 1, children: [] }],
+        total: 1,
+        page: 1,
+        pageSize: 20,
+      },
+    }));
+    const client = createKoeClient({ baseUrl: "http://localhost:3000", fetch: fetchFn });
+
+    const result = await client.comments.list(thread.id);
+
+    expect(result.comments[0].userVote).toBe(1);
   });
 
   it("throws KoeApiError with problem details on a non-ok response", async () => {

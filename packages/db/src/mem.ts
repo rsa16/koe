@@ -67,6 +67,16 @@ export async function createMemDb() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
+    CREATE TABLE votes (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      comment_id UUID NOT NULL REFERENCES comments(id) ON DELETE CASCADE,
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      value INTEGER NOT NULL CHECK (value IN (1, -1)),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (comment_id, user_id)
+    );
+
     CREATE TABLE sessions (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
