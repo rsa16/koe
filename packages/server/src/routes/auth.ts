@@ -13,16 +13,16 @@ import {
   UserSchema,
 } from "@koe/core";
 import { Database, identities, users } from "@koe/db";
-import crypto from "node:crypto";
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import crypto from "node:crypto";
+import { renderOAuthSuccessPage, sendOAuthErrorPage } from "../oauth-render.js";
 import {
   generateCodeVerifier,
   generateState,
+  GOOGLE_OAUTH_SCOPES,
   GoogleOAuthProvider,
   GoogleUserInfo,
-  GOOGLE_OAUTH_SCOPES,
 } from "../oauth.js";
-import { sendOAuthErrorPage, renderOAuthSuccessPage } from "../oauth-render.js";
 import { resolveGoogleUser } from "../user-accounts.js";
 
 const OAUTH_STATE_COOKIE = "koe_oauth_state";
@@ -81,14 +81,10 @@ export default async function authRoutes(
       .send(AnonymousAuthResponseSchema.parse({ accessToken, user }));
   };
 
-  app.post("/api/v1/auth/anonymous", anonymousHandler);
-
   // Auth: Current user profile
   const meHandler = async (request: FastifyRequest, reply: FastifyReply) => {
     return reply.status(200).send(UserSchema.parse(request.user));
   };
-
-  app.get("/api/v1/auth/me", { preHandler: app.authenticate }, meHandler);
 
   // Auth: Google OAuth start
   const oauthGoogleHandler = async (
@@ -133,8 +129,6 @@ export default async function authRoutes(
     reply.setCookie(OAUTH_STATE_COOKIE, stateToken, oauthStateCookieAttributes);
     return reply.redirect(authorizationUrl.toString());
   };
-
-  app.get("/api/v1/auth/oauth/google", oauthGoogleHandler);
 
   // Auth: Google OAuth callback
   const oauthGoogleCallbackHandler = async (
@@ -216,5 +210,8 @@ export default async function authRoutes(
       .send(renderOAuthSuccessPage(payload, clientOrigin));
   };
 
+  app.post("/api/v1/auth/anonymous", anonymousHandler);
+  app.get("/api/v1/auth/me", { preHandler: app.authenticate }, meHandler);
+  app.get("/api/v1/auth/oauth/google", oauthGoogleHandler);
   app.get("/api/v1/auth/oauth/google/callback", oauthGoogleCallbackHandler);
 }
