@@ -42,10 +42,14 @@ export class KoeComments extends LitElement {
   @state() private threadId = "";
   @state() private loading = true;
   @state() private submitting = false;
+  @state() private submittingReply = false;
   @state() private voting = false;
   @state() private reacting = false;
   @state() private draft = "";
+  @state() private replyDraft = "";
   @state() private replyTo: string | null = null;
+  @state() private expandedReactions: Set<string> = new Set();
+  @state() private openReactionPicker: string | null = null;
   @state() private error = "";
 
   private client: KoeClient | null = null;
@@ -131,6 +135,24 @@ export class KoeComments extends LitElement {
     this.draft = (e.target as HTMLTextAreaElement).value;
   }
 
+  private handleReplyInput(e: Event) {
+    this.replyDraft = (e.target as HTMLTextAreaElement).value;
+  }
+
+  private async submitComment(body: string, parentId?: string) {
+    await this.withAuthRetry(() =>
+      this.client!.comments.create(
+        this.threadId,
+        {
+          bodyMd: body,
+          ...(parentId ? { parentId } : {}),
+        },
+        this.token
+      )
+    );
+    await this.reloadComments();
+  }
+
   private async handleSubmit(e: SubmitEvent) {
     e.preventDefault();
     const body = this.draft.trim();
@@ -140,19 +162,8 @@ export class KoeComments extends LitElement {
     this.submitting = true;
     this.error = "";
     try {
-      await this.withAuthRetry(() =>
-        this.client!.comments.create(
-          this.threadId,
-          {
-            bodyMd: body,
-            ...(this.replyTo ? { parentId: this.replyTo } : {}),
-          },
-          this.token
-        )
-      );
+      await this.submitComment(body);
       this.draft = "";
-      this.replyTo = null;
-      await this.reloadComments();
     } catch (err) {
       this.error =
         err instanceof Error ? err.message : "Failed to post comment";
@@ -161,12 +172,63 @@ export class KoeComments extends LitElement {
     }
   }
 
+  private async handleReplySubmit(e: SubmitEvent) {
+    e.preventDefault();
+    const body = this.replyDraft.trim();
+    if (!body || !this.threadId || !this.replyTo || this.submittingReply) {
+      return;
+    }
+    this.submittingReply = true;
+    this.error = "";
+    try {
+      await this.submitComment(body, this.replyTo);
+      this.replyDraft = "";
+      this.replyTo = null;
+    } catch (err) {
+      this.error =
+        err instanceof Error ? err.message : "Failed to post reply";
+    } finally {
+      this.submittingReply = false;
+    }
+  }
+
   private startReply(commentId: string) {
     this.replyTo = commentId;
+    this.replyDraft = "";
+  }
+
+  private emojiIndex(emoji: string): number {
+    const index = this.emojis.indexOf(emoji);
+    return index === -1 ? this.emojis.length : index;
+  }
+
+  private visibleReactions(comment: CommentNode): [string, number][] {
+    return Object.entries(comment.reactionTotals ?? {})
+      .filter(([, count]) => count > 0)
+      .sort(
+        (a, b) =>
+          b[1] - a[1] || this.emojiIndex(a[0]) - this.emojiIndex(b[0])
+      );
+  }
+
+  private toggleReactions(commentId: string) {
+    const next = new Set(this.expandedReactions);
+    if (next.has(commentId)) {
+      next.delete(commentId);
+    } else {
+      next.add(commentId);
+    }
+    this.expandedReactions = next;
+  }
+
+  private toggleReactionPicker(commentId: string) {
+    this.openReactionPicker =
+      this.openReactionPicker === commentId ? null : commentId;
   }
 
   private cancelReply() {
     this.replyTo = null;
+    this.replyDraft = "";
   }
 
   private async voteComment(commentId: string, value: 1 | -1) {
@@ -198,6 +260,7 @@ export class KoeComments extends LitElement {
       await this.withAuthRetry(() =>
         this.client!.comments.react(commentId, emoji, this.token)
       );
+      this.openReactionPicker = null;
       await this.reloadComments();
     } catch (err) {
       this.error =
@@ -240,18 +303,6 @@ export class KoeComments extends LitElement {
           : ""}
 
         <form class="composer mb-6" @submit=${this.handleSubmit}>
-          ${this.replyTo
-            ? html`<p class="reply-target mb-2 flex items-center justify-between rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-700">
-                <span>Replying to a comment</span>
-                <button
-                  type="button"
-                  class="rounded px-2 py-0.5 font-medium text-blue-600 transition-colors hover:bg-blue-100 hover:text-blue-800"
-                  @click=${this.cancelReply}
-                >
-                  Cancel
-                </button>
-              </p>`
-            : ""}
           <div class="flex gap-3">
             ${this.avatar("#64748b")}
             <div class="min-w-0 flex-1">
@@ -268,11 +319,7 @@ export class KoeComments extends LitElement {
                   class="rounded-lg bg-blue-600 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500/40 disabled:cursor-not-allowed disabled:opacity-50"
                   ?disabled=${this.submitting || !this.draft.trim()}
                 >
-                  ${this.submitting
-                    ? "Posting..."
-                    : this.replyTo
-                      ? "Post reply"
-                      : "Post comment"}
+                  ${this.submitting ? "Posting..." : "Post comment"}
                 </button>
               </div>
             </div>
@@ -297,6 +344,11 @@ export class KoeComments extends LitElement {
 
   private renderComment(comment: CommentNode): TemplateResult {
     const createdAt = new Date(comment.createdAt);
+    const reactions = this.visibleReactions(comment);
+    const expanded = this.expandedReactions.has(comment.id);
+    const shown = expanded ? reactions : reactions.slice(0, 3);
+    const hiddenCount = reactions.length - 3;
+    const canToggle = reactions.length > 3;
     return html`
       <li class="comment flex gap-3">
         ${this.avatar(avatarColor(comment.authorId))}
@@ -341,10 +393,10 @@ export class KoeComments extends LitElement {
               </button>
             </div>
 
-            <div class="reaction-list flex flex-wrap gap-1.5">
-              ${this.emojis.map((emoji) => {
-                const count = comment.reactionTotals?.[emoji] ?? 0;
-                const active = comment.userReactions?.includes(emoji) ?? false;
+            <div class="reaction-list flex flex-wrap items-center gap-1.5">
+              ${shown.map(([emoji, count]) => {
+                const active =
+                  comment.userReactions?.includes(emoji) ?? false;
                 return html`
                   <button
                     type="button"
@@ -358,6 +410,41 @@ export class KoeComments extends LitElement {
                   </button>
                 `;
               })}
+              ${canToggle
+                ? html`
+                    <button
+                      type="button"
+                      class="reactions-toggle inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-500 transition-colors hover:border-slate-300 hover:bg-slate-50"
+                      @click=${() => this.toggleReactions(comment.id)}
+                    >
+                      ${expanded ? "Show fewer" : `+${hiddenCount} more`}
+                    </button>
+                  `
+                : ""}
+              <button
+                type="button"
+                class="add-reaction-button inline-flex h-7 w-7 items-center justify-center rounded-full border border-dashed border-slate-300 bg-white text-sm text-slate-500 transition-colors hover:border-slate-400 hover:bg-slate-50 hover:text-slate-700"
+                aria-label="Add reaction"
+                @click=${() => this.toggleReactionPicker(comment.id)}
+              >
+                😊
+              </button>
+              ${this.openReactionPicker === comment.id
+                ? html`
+                    <div class="reaction-picker inline-flex flex-wrap gap-1 rounded-lg border border-slate-200 bg-white p-1.5 shadow-sm">
+                      ${this.emojis.map((emoji) => html`
+                        <button
+                          type="button"
+                          class="reaction-picker-button h-7 w-7 rounded text-base transition-colors hover:bg-slate-100"
+                          aria-label=${`React with ${emoji}`}
+                          @click=${() => this.reactToComment(comment.id, emoji)}
+                        >
+                          ${emoji}
+                        </button>
+                      `)}
+                    </div>
+                  `
+                : ""}
             </div>
 
             <button
@@ -368,6 +455,44 @@ export class KoeComments extends LitElement {
               Reply
             </button>
           </div>
+
+          ${comment.id === this.replyTo
+            ? html`
+                <div class="reply-composer mt-3">
+                  <form
+                    class="flex gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3"
+                    @submit=${this.handleReplySubmit}
+                  >
+                    ${this.avatar("#64748b")}
+                    <div class="min-w-0 flex-1">
+                      <textarea
+                        rows="2"
+                        placeholder="Reply to this comment..."
+                        class="w-full resize-y rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                        .value=${this.replyDraft}
+                        @input=${this.handleReplyInput}
+                      ></textarea>
+                      <div class="mt-2 flex justify-end gap-2">
+                        <button
+                          type="button"
+                          class="rounded-lg px-3 py-1.5 text-sm font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                          @click=${this.cancelReply}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          class="rounded-lg bg-blue-600 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500/40 disabled:cursor-not-allowed disabled:opacity-50"
+                          ?disabled=${this.submittingReply || !this.replyDraft.trim()}
+                        >
+                          ${this.submittingReply ? "Posting..." : "Post reply"}
+                        </button>
+                      </div>
+                    </div>
+                  </form>
+                </div>
+              `
+            : ""}
 
           ${comment.children.length > 0
             ? html`
