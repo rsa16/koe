@@ -11,8 +11,9 @@
     }
   },
   "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch --preserveWatchOutput",
+    "build:styles": "node scripts/build-styles.mjs",
+    "build": "npm run build:styles && tsc",
+    "dev": "npm run build:styles && tsc --watch --preserveWatchOutput",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
@@ -23,8 +24,11 @@
   "devDependencies": {
     "@koe/db": "*",
     "@koe/server": "*",
+    "@tailwindcss/cli": "^4.3.3",
+    "@tailwindcss/typography": "^0.5.20",
     "@types/node": "^22.13.9",
     "jsdom": "^26.0.0",
+    "tailwindcss": "^4.3.3",
     "typescript": "^5.8.2",
     "vitest": "^3.0.7"
   }

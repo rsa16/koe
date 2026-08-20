@@ -1,0 +1,51 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+@source "./koe-comments.ts";
+
+@layer components {
+  :host {
+    display: block;
+    font-family: var(--koe-font, system-ui, sans-serif);
+    color: var(--koe-text, #0f172a);
+  }
+
+  .comment-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .comment-body {
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .pending-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 8px;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: #92400e;
+    background-color: #fef3c7;
+    white-space: nowrap;
+  }
+
+  .vote-button.active {
+    color: #2563eb;
+    background-color: #eff6ff;
+    font-weight: 700;
+  }
+
+  .reaction-button.active {
+    color: #1d4ed8;
+    border-color: #93c5fd;
+    background-color: #eff6ff;
+    font-weight: 600;
+  }
+
+  .reaction-button.active .reaction-count {
+    color: #2563eb;
+  }
+}

@@ -3,7 +3,7 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", "public/widget.js*"]
+      "outputs": ["dist/**", "src/generated/**", "public/widget.js*"]
     },
     "dev": {
       "cache": false,

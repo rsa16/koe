@@ -6,3 +6,4 @@ dist/
 *.log
 .scratch
 coverage/
+packages/widget/src/generated/

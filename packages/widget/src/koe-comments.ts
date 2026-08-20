@@ -1,197 +1,33 @@
 import { CommentNode, createKoeClient, DEFAULT_EMOJI_ALLOWLIST, KoeClient } from "@koe/sdk";
-import { css, html, LitElement, TemplateResult } from "lit";
+import { html, LitElement, TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
+import { tailwindStyles } from "./generated/tailwind.styles.js";
 
 const ACCESS_TOKEN_KEY = "koe_access_token";
 
+const AVATAR_COLORS = [
+  "#0ea5e9",
+  "#8b5cf6",
+  "#f59e0b",
+  "#10b981",
+  "#ef4444",
+  "#ec4899",
+  "#6366f1",
+  "#14b8a6",
+];
+
+function avatarColor(id: string): string {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) {
+    hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
+  }
+  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
+}
+
 @customElement("koe-comments")
 export class KoeComments extends LitElement {
-  static styles = css`
-    :host {
-      display: block;
-      font-family: var(--koe-font, system-ui, sans-serif);
-      color: var(--koe-text, #1a1a1a);
-    }
-
-    .koe-comments {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-
-    .composer {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    textarea {
-      resize: vertical;
-      padding: 8px;
-      border: 1px solid var(--koe-border, #ccc);
-      border-radius: 4px;
-      font: inherit;
-    }
-
-    button {
-      align-self: flex-start;
-      padding: 6px 14px;
-      border: none;
-      border-radius: 4px;
-      background: var(--koe-accent, #2563eb);
-      color: #fff;
-      font: inherit;
-      cursor: pointer;
-    }
-
-    button:disabled {
-      opacity: 0.5;
-      cursor: default;
-    }
-
-    .comment-list {
-      list-style: none;
-      margin: 0;
-      padding: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-
-    .comment-list--nested {
-      margin-top: 10px;
-      margin-left: 24px;
-      padding-left: 12px;
-      border-left: 1px solid var(--koe-border, #ddd);
-    }
-
-    .comment {
-      padding: 10px;
-      border: 1px solid var(--koe-border, #ddd);
-      border-radius: 6px;
-      background: var(--koe-surface, #fafafa);
-    }
-
-    .comment-body {
-      margin: 0 0 6px;
-      white-space: pre-wrap;
-      word-break: break-word;
-    }
-
-    .comment-meta {
-      margin: 0;
-      font-size: 0.8em;
-      color: var(--koe-muted, #666);
-    }
-
-    .comment-meta .pending-badge {
-      display: inline-block;
-      margin-right: 6px;
-      padding: 1px 6px;
-      border-radius: 999px;
-      font-size: 0.75em;
-      color: var(--koe-pending-text, #92400e);
-      background: var(--koe-pending, #fef3c7);
-    }
-
-    .reply-button {
-      margin-top: 4px;
-      padding: 2px 10px;
-      border: 1px solid var(--koe-border, #ccc);
-      border-radius: 4px;
-      background: transparent;
-      color: var(--koe-text, #1a1a1a);
-      font: inherit;
-      font-size: 0.8em;
-      cursor: pointer;
-    }
-
-    .vote-controls {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      margin-top: 6px;
-      margin-right: 8px;
-    }
-
-    .vote-button {
-      padding: 2px 8px;
-      border: 1px solid var(--koe-border, #ccc);
-      border-radius: 4px;
-      background: transparent;
-      color: var(--koe-muted, #666);
-      font: inherit;
-      font-size: 0.8em;
-      cursor: pointer;
-    }
-
-    .vote-button.active {
-      color: var(--koe-accent, #2563eb);
-      border-color: var(--koe-accent, #2563eb);
-      font-weight: bold;
-    }
-
-    .vote-score {
-      min-width: 24px;
-      text-align: center;
-      font-size: 0.8em;
-      font-weight: bold;
-      color: var(--koe-text, #1a1a1a);
-    }
-
-    .reaction-list {
-      display: inline-flex;
-      flex-wrap: wrap;
-      gap: 4px;
-      margin-top: 6px;
-      margin-right: 8px;
-    }
-
-    .reaction-button {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      padding: 2px 8px;
-      border: 1px solid var(--koe-border, #ccc);
-      border-radius: 999px;
-      background: transparent;
-      color: var(--koe-text, #1a1a1a);
-      font: inherit;
-      font-size: 0.8em;
-      cursor: pointer;
-    }
-
-    .reaction-button.active {
-      background: var(--koe-reaction-active, #dbeafe);
-      border-color: var(--koe-accent, #2563eb);
-      font-weight: bold;
-    }
-
-    .reaction-count {
-      font-size: 0.85em;
-      color: var(--koe-muted, #666);
-    }
-
-    .reaction-button.active .reaction-count {
-      color: var(--koe-accent, #2563eb);
-    }
-
-    .reply-target {
-      margin: 0;
-      font-size: 0.8em;
-      color: var(--koe-muted, #666);
-    }
-
-    .error {
-      color: var(--koe-error, #b91c1c);
-    }
-
-    .status,
-    .empty {
-      color: var(--koe-muted, #666);
-    }
-  `;
+  static styles = [tailwindStyles];
 
   @property({ type: String, attribute: "base-url" })
   baseUrl = "";
@@ -346,49 +182,88 @@ export class KoeComments extends LitElement {
     }
   }
 
+  private avatar(color: string): TemplateResult {
+    return html`
+      <div
+        class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white"
+        style="background-color: ${color}"
+        aria-hidden="true"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="currentColor"
+          class="h-5 w-5"
+        >
+          <path d="M12 12a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9Zm0 2c-3.87 0-7 2.58-7 6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2c0-3.42-3.13-6-7-6Z" />
+        </svg>
+      </div>
+    `;
+  }
+
   protected render() {
     return html`
-      <section class="koe-comments">
-        <h3>Comments</h3>
+      <section class="koe-comments font-sans">
+        <div class="mb-5 border-b border-slate-200 pb-3">
+          <h3 class="text-base font-semibold text-slate-900">Comments</h3>
+        </div>
+
         ${this.error
-          ? html`<p class="error" role="alert">${this.error}</p>`
+          ? html`<p class="error mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+              ${this.error}
+            </p>`
           : ""}
-        <form class="composer" @submit=${this.handleSubmit}>
+
+        <form class="composer mb-6" @submit=${this.handleSubmit}>
           ${this.replyTo
-            ? html`<p class="reply-target">
-                Replying to a comment
-                <button type="button" @click=${this.cancelReply}>
+            ? html`<p class="reply-target mb-2 flex items-center justify-between rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-700">
+                <span>Replying to a comment</span>
+                <button
+                  type="button"
+                  class="rounded px-2 py-0.5 font-medium text-blue-600 transition-colors hover:bg-blue-100 hover:text-blue-800"
+                  @click=${this.cancelReply}
+                >
                   Cancel
                 </button>
               </p>`
             : ""}
-          <textarea
-            rows="3"
-            placeholder="Write a comment..."
-            .value=${this.draft}
-            @input=${this.handleInput}
-          ></textarea>
-          <button
-            type="submit"
-            ?disabled=${this.submitting || !this.draft.trim()}
-          >
-            ${this.submitting
-              ? "Posting..."
-              : this.replyTo
-                ? "Post reply"
-                : "Post comment"}
-          </button>
+          <div class="flex gap-3">
+            ${this.avatar("#64748b")}
+            <div class="min-w-0 flex-1">
+              <textarea
+                rows="3"
+                placeholder="Add a comment..."
+                class="w-full resize-y rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                .value=${this.draft}
+                @input=${this.handleInput}
+              ></textarea>
+              <div class="mt-2 flex justify-end">
+                <button
+                  type="submit"
+                  class="rounded-lg bg-blue-600 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500/40 disabled:cursor-not-allowed disabled:opacity-50"
+                  ?disabled=${this.submitting || !this.draft.trim()}
+                >
+                  ${this.submitting
+                    ? "Posting..."
+                    : this.replyTo
+                      ? "Post reply"
+                      : "Post comment"}
+                </button>
+              </div>
+            </div>
+          </div>
         </form>
+
         ${this.loading
-          ? html`<p class="status">Loading comments...</p>`
+          ? html`<p class="status text-sm text-slate-500">Loading comments...</p>`
           : html`
-              <ul class="comment-list">
+              <ul class="comment-list space-y-4">
                 ${this.comments.map((comment) =>
                   this.renderComment(comment)
                 )}
               </ul>
               ${this.comments.length === 0
-                ? html`<p class="empty">No comments yet. Be the first!</p>`
+                ? html`<p class="empty text-sm text-slate-500">No comments yet. Be the first!</p>`
                 : ""}
             `}
       </section>
@@ -396,70 +271,89 @@ export class KoeComments extends LitElement {
   }
 
   private renderComment(comment: CommentNode): TemplateResult {
+    const createdAt = new Date(comment.createdAt);
     return html`
-      <li class="comment">
-        <div class="comment-body">${unsafeHTML(comment.bodyHtml)}</div>
-        <p class="comment-meta">
-          ${comment.status === "pending"
-            ? html`<span class="pending-badge">Pending approval</span>`
-            : ""}
-          Guest · ${new Date(comment.createdAt).toLocaleString()}
-        </p>
-        <div class="vote-controls">
-          <button
-            type="button"
-            class="vote-button ${comment.userVote === 1 ? "active" : ""}"
-            ?disabled=${this.voting}
-            @click=${() => this.voteComment(comment.id, 1)}
-            aria-label="Upvote"
-          >
-            ▲
-          </button>
-          <span class="vote-score">${comment.upvotes - comment.downvotes}</span>
-          <button
-            type="button"
-            class="vote-button ${comment.userVote === -1 ? "active" : ""}"
-            ?disabled=${this.voting}
-            @click=${() => this.voteComment(comment.id, -1)}
-            aria-label="Downvote"
-          >
-            ▼
-          </button>
-        </div>
-        <div class="reaction-list">
-          ${this.emojis.map((emoji) => {
-            const count = comment.reactionTotals?.[emoji] ?? 0;
-            const active = comment.userReactions?.includes(emoji) ?? false;
-            return html`
+      <li class="comment flex gap-3">
+        ${this.avatar(avatarColor(comment.authorId))}
+        <div class="min-w-0 flex-1">
+          <div class="rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm">
+            <div class="mb-1 flex items-center justify-between gap-2">
+              <span class="text-sm font-semibold text-slate-900">Guest</span>
+              <div class="flex items-center gap-2 text-xs text-slate-400">
+                ${comment.status === "pending"
+                  ? html`<span class="pending-badge">Pending approval</span>`
+                  : ""}
+                <time class="whitespace-nowrap" datetime=${createdAt.toISOString()}>
+                  ${createdAt.toLocaleString()}
+                </time>
+              </div>
+            </div>
+            <div class="comment-body prose prose-sm prose-slate max-w-none">${unsafeHTML(comment.bodyHtml)}</div>
+          </div>
+
+          <div class="mt-2 flex flex-wrap items-center gap-2">
+            <div class="vote-controls inline-flex overflow-hidden rounded-lg border border-slate-200 bg-white">
               <button
                 type="button"
-                class="reaction-button ${active ? "active" : ""}"
-                ?disabled=${this.reacting}
-                @click=${() => this.reactToComment(comment.id, emoji)}
-                aria-label=${`React with ${emoji}`}
-                aria-pressed=${active}
+                class="vote-button flex h-7 w-7 items-center justify-center text-xs text-slate-400 transition-colors hover:bg-slate-50 hover:text-slate-600 disabled:opacity-50 ${comment.userVote === 1 ? "active" : ""}"
+                ?disabled=${this.voting}
+                @click=${() => this.voteComment(comment.id, 1)}
+                aria-label="Upvote"
               >
-                ${emoji}<span class="reaction-count">${count}</span>
+                ▲
               </button>
-            `;
-          })}
+              <span class="vote-score flex min-w-8 items-center justify-center px-1 text-xs font-semibold text-slate-600">
+                ${comment.upvotes - comment.downvotes}
+              </span>
+              <button
+                type="button"
+                class="vote-button flex h-7 w-7 items-center justify-center text-xs text-slate-400 transition-colors hover:bg-slate-50 hover:text-slate-600 disabled:opacity-50 ${comment.userVote === -1 ? "active" : ""}"
+                ?disabled=${this.voting}
+                @click=${() => this.voteComment(comment.id, -1)}
+                aria-label="Downvote"
+              >
+                ▼
+              </button>
+            </div>
+
+            <div class="reaction-list flex flex-wrap gap-1.5">
+              ${this.emojis.map((emoji) => {
+                const count = comment.reactionTotals?.[emoji] ?? 0;
+                const active = comment.userReactions?.includes(emoji) ?? false;
+                return html`
+                  <button
+                    type="button"
+                    class="reaction-button inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50 disabled:opacity-50 ${active ? "active" : ""}"
+                    ?disabled=${this.reacting}
+                    @click=${() => this.reactToComment(comment.id, emoji)}
+                    aria-label=${`React with ${emoji}`}
+                    aria-pressed=${active}
+                  >
+                    ${emoji}<span class="reaction-count text-slate-400">${count}</span>
+                  </button>
+                `;
+              })}
+            </div>
+
+            <button
+              type="button"
+              class="reply-button inline-flex items-center rounded-lg px-2 py-1 text-xs font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
+              @click=${() => this.startReply(comment.id)}
+            >
+              Reply
+            </button>
+          </div>
+
+          ${comment.children.length > 0
+            ? html`
+                <ul class="comment-list comment-list--nested mt-3 ml-2 space-y-3 border-l-2 border-slate-100 pl-3">
+                  ${comment.children.map((child) =>
+                    this.renderComment(child)
+                  )}
+                </ul>
+              `
+            : ""}
         </div>
-        <button
-          type="button"
-          class="reply-button"
-          @click=${() => this.startReply(comment.id)}
-        >
-          Reply
-        </button>
-        ${comment.children.length > 0
-          ? html`
-              <ul class="comment-list comment-list--nested">
-                ${comment.children.map((child) =>
-                  this.renderComment(child)
-                )}
-              </ul>
-            `
-          : ""}
       </li>
     `;
   }
