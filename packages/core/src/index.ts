@@ -34,6 +34,15 @@ export const UserSchema = z.object({
 });
 export type User = z.infer<typeof UserSchema>;
 
+export const UpdateUserBodySchema = z
+  .object({
+    role: UserRoleSchema.optional(),
+  })
+  .refine((data) => Object.keys(data).length > 0, {
+    message: "At least one field must be provided to update",
+  });
+export type UpdateUserBody = z.infer<typeof UpdateUserBodySchema>;
+
 export const IdentitySchema = z.object({
   id: z.string().uuid(),
   userId: z.string().uuid(),

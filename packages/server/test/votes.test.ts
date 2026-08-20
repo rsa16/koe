@@ -1,15 +1,19 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { buildApp } from "../src/app.js";
-import { createMemDb } from "@koe/db";
-import { VoteSchema } from "@koe/core";
+import { createMemDb, Database, users } from "@koe/db";
+import { eq } from "drizzle-orm";
+import { signAccessToken } from "@koe/auth";
+import { UserRole, VoteSchema } from "@koe/core";
 import { FastifyInstance } from "fastify";
 
 describe("Votes API Seam Integration Tests", () => {
   let app: FastifyInstance;
+  let memDb: Database;
   const jwtSecret = "test-jwt-secret-at-least-32-chars-long";
 
   beforeEach(async () => {
     const { db } = await createMemDb();
+    memDb = db;
     app = buildApp({ db, jwtSecret, logger: false });
     await app.ready();
   });
@@ -34,6 +38,20 @@ describe("Votes API Seam Integration Tests", () => {
     });
     expect(response.statusCode).toBe(200);
     return response.json().accessToken;
+  }
+
+  async function userToken(role: UserRole = "moderator"): Promise<string> {
+    const guestToken = await anonToken();
+    const meRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/auth/me",
+      headers: { authorization: `Bearer ${guestToken}` },
+    });
+    expect(meRes.statusCode).toBe(200);
+    const userId = meRes.json().id;
+
+    await memDb.update(users).set({ role }).where(eq(users.id, userId));
+    return signAccessToken({ userId, role }, { secret: jwtSecret, expiresIn: "15m" });
   }
 
   async function postComment(
@@ -61,11 +79,12 @@ describe("Votes API Seam Integration Tests", () => {
     return response.json();
   }
 
-  async function approveComment(commentId: string, token: string): Promise<void> {
+  async function approveComment(commentId: string, token?: string): Promise<void> {
+    const modToken = token ?? (await userToken("moderator"));
     const response = await app.inject({
       method: "POST",
       url: "/api/v1/moderation/actions",
-      headers: { authorization: `Bearer ${token}` },
+      headers: { authorization: `Bearer ${modToken}` },
       payload: { commentId, action: "approve" },
     });
     expect(response.statusCode).toBe(200);
@@ -138,7 +157,7 @@ describe("Votes API Seam Integration Tests", () => {
     const threadId = await createThread();
     const token = await anonToken();
     const commentId = await postComment(threadId, token, "upvote me");
-    await approveComment(commentId, token);
+    await approveComment(commentId);
 
     const response = await voteRequest(commentId, token, 1);
     expect(response.statusCode).toBe(201);
@@ -158,7 +177,7 @@ describe("Votes API Seam Integration Tests", () => {
     const threadId = await createThread();
     const token = await anonToken();
     const commentId = await postComment(threadId, token, "downvote me");
-    await approveComment(commentId, token);
+    await approveComment(commentId);
 
     const response = await voteRequest(commentId, token, -1);
     expect(response.statusCode).toBe(201);
@@ -172,7 +191,7 @@ describe("Votes API Seam Integration Tests", () => {
     const threadId = await createThread();
     const token = await anonToken();
     const commentId = await postComment(threadId, token, "toggle me");
-    await approveComment(commentId, token);
+    await approveComment(commentId);
 
     const first = await voteRequest(commentId, token, 1);
     expect(first.statusCode).toBe(201);
@@ -189,7 +208,7 @@ describe("Votes API Seam Integration Tests", () => {
     const threadId = await createThread();
     const token = await anonToken();
     const commentId = await postComment(threadId, token, "switch me");
-    await approveComment(commentId, token);
+    await approveComment(commentId);
 
     await voteRequest(commentId, token, 1);
     const switched = await voteRequest(commentId, token, -1);
@@ -205,7 +224,7 @@ describe("Votes API Seam Integration Tests", () => {
     const threadId = await createThread();
     const token = await anonToken();
     const commentId = await postComment(threadId, token, "one per user");
-    await approveComment(commentId, token);
+    await approveComment(commentId);
 
     const secondUserToken = await anonToken();
     await voteRequest(commentId, token, 1);
@@ -219,7 +238,7 @@ describe("Votes API Seam Integration Tests", () => {
     const threadId = await createThread();
     const token = await anonToken();
     const commentId = await postComment(threadId, token, "delete me");
-    await approveComment(commentId, token);
+    await approveComment(commentId);
 
     await voteRequest(commentId, token, 1);
 
@@ -259,7 +278,7 @@ describe("Votes API Seam Integration Tests", () => {
     const threadId = await createThread();
     const token = await anonToken();
     const commentId = await postComment(threadId, token, "state");
-    await approveComment(commentId, token);
+    await approveComment(commentId);
 
     await voteRequest(commentId, token, 1);
 
@@ -275,7 +294,7 @@ describe("Votes API Seam Integration Tests", () => {
     const token = await anonToken();
     const otherToken = await anonToken();
     const commentId = await postComment(threadId, token, "no vote");
-    await approveComment(commentId, token);
+    await approveComment(commentId);
 
     await voteRequest(commentId, token, -1);
 

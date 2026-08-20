@@ -115,12 +115,12 @@ export default async function moderationRoutes(
 
   app.get(
     "/api/v1/moderation/queue",
-    { preHandler: app.authenticate },
+    { preHandler: app.requireRole(["moderator", "admin"]) },
     queueHandler
   );
   app.post(
     "/api/v1/moderation/actions",
-    { preHandler: app.authenticate },
+    { preHandler: app.requireRole(["moderator", "admin"]) },
     actionHandler
   );
 }

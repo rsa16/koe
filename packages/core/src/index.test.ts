@@ -45,6 +45,14 @@ describe("Core Zod Schemas", () => {
     expect(parsed.success).toBe(true);
   });
 
+  it("validates UpdateUserBodySchema", async () => {
+    const { UpdateUserBodySchema } = await import("./index.js");
+    expect(UpdateUserBodySchema.safeParse({ role: "admin" }).success).toBe(true);
+    expect(UpdateUserBodySchema.safeParse({ role: "moderator" }).success).toBe(true);
+    expect(UpdateUserBodySchema.safeParse({ role: "invalid_role" }).success).toBe(false);
+    expect(UpdateUserBodySchema.safeParse({}).success).toBe(false);
+  });
+
   it("coerces ISO date strings into Date instances", () => {
     const parsed = UserSchema.safeParse({
       id: "123e4567-e89b-12d3-a456-426614174000",

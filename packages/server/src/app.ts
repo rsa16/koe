@@ -16,6 +16,7 @@ import commentsRoutes from "./routes/comments.js";
 import votesRoutes from "./routes/votes.js";
 import reactionsRoutes from "./routes/reactions.js";
 import moderationRoutes from "./routes/moderation.js";
+import usersRoutes from "./routes/users.js";
 
 export interface BuildAppOptions {
   db: Database;
@@ -59,6 +60,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   app.register(votesRoutes, { db: options.db });
   app.register(reactionsRoutes, { db: options.db, allowlist: reactionAllowlist });
   app.register(moderationRoutes, { db: options.db });
+  app.register(usersRoutes, { db: options.db });
 
   return app;
 }

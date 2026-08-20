@@ -1,15 +1,19 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { buildApp } from "../src/app.js";
-import { createMemDb } from "@koe/db";
-import { CommentSchema, CommentListResponseSchema } from "@koe/core";
+import { createMemDb, Database, users } from "@koe/db";
+import { eq } from "drizzle-orm";
+import { signAccessToken } from "@koe/auth";
+import { CommentSchema, CommentListResponseSchema, UserRole } from "@koe/core";
 import { FastifyInstance } from "fastify";
 
 describe("Comments API Seam Integration Tests", () => {
   let app: FastifyInstance;
+  let memDb: Database;
   const jwtSecret = "test-jwt-secret-at-least-32-chars-long";
 
   beforeEach(async () => {
     const { db } = await createMemDb();
+    memDb = db;
     app = buildApp({ db, jwtSecret, logger: false });
     await app.ready();
   });
@@ -36,6 +40,20 @@ describe("Comments API Seam Integration Tests", () => {
     return response.json().accessToken;
   }
 
+  async function userToken(role: UserRole = "moderator"): Promise<string> {
+    const guestToken = await anonToken();
+    const meRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/auth/me",
+      headers: { authorization: `Bearer ${guestToken}` },
+    });
+    expect(meRes.statusCode).toBe(200);
+    const userId = meRes.json().id;
+
+    await memDb.update(users).set({ role }).where(eq(users.id, userId));
+    return signAccessToken({ userId, role }, { secret: jwtSecret, expiresIn: "15m" });
+  }
+
   async function postComment(
     threadId: string,
     token: string,
@@ -54,12 +72,13 @@ describe("Comments API Seam Integration Tests", () => {
 
   async function approveComment(
     commentId: string,
-    token: string
+    token?: string
   ): Promise<void> {
+    const modToken = token ?? (await userToken("moderator"));
     const response = await app.inject({
       method: "POST",
       url: "/api/v1/moderation/actions",
-      headers: { authorization: `Bearer ${token}` },
+      headers: { authorization: `Bearer ${modToken}` },
       payload: { commentId, action: "approve" },
     });
     expect(response.statusCode).toBe(200);
@@ -172,7 +191,7 @@ describe("Comments API Seam Integration Tests", () => {
     expect(postResponse.statusCode).toBe(201);
     expect(postResponse.json().status).toBe("pending");
 
-    await approveComment(postResponse.json().id, token);
+    await approveComment(postResponse.json().id);
 
     const listResponse = await app.inject({
       method: "GET",
@@ -228,7 +247,7 @@ describe("Comments API Seam Integration Tests", () => {
     const otherToken = await anonToken();
 
     const comment = await postComment(threadId, authorToken, "approved");
-    await approveComment(comment.id as string, authorToken);
+    await approveComment(comment.id as string);
 
     for (const token of [undefined, otherToken, authorToken]) {
       const list = await app.inject({
@@ -382,7 +401,7 @@ describe("Comments API Seam Integration Tests", () => {
     );
     const other = await postComment(threadId, token, "other");
     for (const c of [root, child1, child2, grandchild, other]) {
-      await approveComment(c.id as string, token);
+      await approveComment(c.id as string);
     }
 
     const listResponse = await app.inject({
@@ -425,7 +444,7 @@ describe("Comments API Seam Integration Tests", () => {
       posted.push(response.json().id);
     }
     for (const id of posted) {
-      await approveComment(id, token);
+      await approveComment(id);
     }
 
     const pageOne = await app.inject({

@@ -1,15 +1,19 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { buildApp } from "../src/app.js";
-import { createMemDb } from "@koe/db";
-import { ModerationQueueResponseSchema } from "@koe/core";
+import { createMemDb, Database, users } from "@koe/db";
+import { eq } from "drizzle-orm";
+import { ModerationQueueResponseSchema, UserRole } from "@koe/core";
 import { FastifyInstance } from "fastify";
+import { signAccessToken } from "@koe/auth";
 
 describe("Moderation API Seam Integration Tests", () => {
   let app: FastifyInstance;
+  let memDb: Database;
   const jwtSecret = "test-jwt-secret-at-least-32-chars-long";
 
   beforeEach(async () => {
     const { db } = await createMemDb();
+    memDb = db;
     app = buildApp({ db, jwtSecret, logger: false });
     await app.ready();
   });
@@ -34,6 +38,20 @@ describe("Moderation API Seam Integration Tests", () => {
     });
     expect(response.statusCode).toBe(200);
     return response.json().accessToken;
+  }
+
+  async function userToken(role: UserRole = "moderator"): Promise<string> {
+    const guestToken = await anonToken();
+    const meRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/auth/me",
+      headers: { authorization: `Bearer ${guestToken}` },
+    });
+    expect(meRes.statusCode).toBe(200);
+    const userId = meRes.json().id;
+
+    await memDb.update(users).set({ role }).where(eq(users.id, userId));
+    return signAccessToken({ userId, role }, { secret: jwtSecret, expiresIn: "15m" });
   }
 
   async function postComment(
@@ -82,8 +100,43 @@ describe("Moderation API Seam Integration Tests", () => {
       );
     });
 
+    it("returns 403 Forbidden for guest or member roles", async () => {
+      const guestToken = await anonToken();
+      const memberToken = await userToken("member");
+
+      const resGuest = await app.inject({
+        method: "POST",
+        url: "/api/v1/moderation/actions",
+        headers: { authorization: `Bearer ${guestToken}` },
+        payload: {
+          commentId: "123e4567-e89b-12d3-a456-426614174000",
+          action: "approve",
+        },
+      });
+      expect(resGuest.statusCode).toBe(403);
+      expect(resGuest.headers["content-type"]).toContain(
+        "application/problem+json"
+      );
+      expect(resGuest.json().title).toBe("Forbidden");
+
+      const resMember = await app.inject({
+        method: "POST",
+        url: "/api/v1/moderation/actions",
+        headers: { authorization: `Bearer ${memberToken}` },
+        payload: {
+          commentId: "123e4567-e89b-12d3-a456-426614174000",
+          action: "approve",
+        },
+      });
+      expect(resMember.statusCode).toBe(403);
+      expect(resMember.headers["content-type"]).toContain(
+        "application/problem+json"
+      );
+      expect(resMember.json().title).toBe("Forbidden");
+    });
+
     it("rejects a malformed body", async () => {
-      const token = await anonToken();
+      const token = await userToken("moderator");
 
       const response = await app.inject({
         method: "POST",
@@ -99,7 +152,7 @@ describe("Moderation API Seam Integration Tests", () => {
     });
 
     it("returns 404 for an unknown comment", async () => {
-      const token = await anonToken();
+      const token = await userToken("moderator");
 
       const response = await act(
         "123e4567-e89b-12d3-a456-426614174000",
@@ -113,12 +166,13 @@ describe("Moderation API Seam Integration Tests", () => {
       );
     });
 
-    it("approve publishes a pending comment for everyone to see", async () => {
+    it("approve publishes a pending comment for everyone to see (moderator & admin)", async () => {
       const threadId = await createThread();
-      const token = await anonToken();
-      const commentId = await postComment(threadId, token, "approve me");
+      const authorToken = await anonToken();
+      const modToken = await userToken("moderator");
+      const commentId = await postComment(threadId, authorToken, "approve me");
 
-      const response = await act(commentId, "approve", token);
+      const response = await act(commentId, "approve", modToken);
 
       expect(response.statusCode).toBe(200);
       expect(response.json().id).toBe(commentId);
@@ -137,10 +191,11 @@ describe("Moderation API Seam Integration Tests", () => {
 
     it("reject hides a pending comment from anonymous readers", async () => {
       const threadId = await createThread();
-      const token = await anonToken();
-      const commentId = await postComment(threadId, token, "reject me");
+      const authorToken = await anonToken();
+      const adminToken = await userToken("admin");
+      const commentId = await postComment(threadId, authorToken, "reject me");
 
-      const response = await act(commentId, "reject", token);
+      const response = await act(commentId, "reject", adminToken);
 
       expect(response.statusCode).toBe(200);
       expect(response.json().status).toBe("deleted");
@@ -154,10 +209,11 @@ describe("Moderation API Seam Integration Tests", () => {
 
     it("delete hides a pending comment from anonymous readers", async () => {
       const threadId = await createThread();
-      const token = await anonToken();
-      const commentId = await postComment(threadId, token, "delete me");
+      const authorToken = await anonToken();
+      const modToken = await userToken("moderator");
+      const commentId = await postComment(threadId, authorToken, "delete me");
 
-      const response = await act(commentId, "delete", token);
+      const response = await act(commentId, "delete", modToken);
 
       expect(response.statusCode).toBe(200);
       expect(response.json().status).toBe("deleted");
@@ -171,12 +227,13 @@ describe("Moderation API Seam Integration Tests", () => {
 
     it("approve cannot resurrect a deleted comment", async () => {
       const threadId = await createThread();
-      const token = await anonToken();
-      const commentId = await postComment(threadId, token, "gone");
+      const authorToken = await anonToken();
+      const modToken = await userToken("moderator");
+      const commentId = await postComment(threadId, authorToken, "gone");
 
-      await act(commentId, "reject", token);
+      await act(commentId, "reject", modToken);
 
-      const response = await act(commentId, "approve", token);
+      const response = await act(commentId, "approve", modToken);
 
       expect(response.statusCode).toBe(409);
       expect(response.headers["content-type"]).toContain(
@@ -192,23 +249,25 @@ describe("Moderation API Seam Integration Tests", () => {
 
     it("reject cannot be applied to an already published comment", async () => {
       const threadId = await createThread();
-      const token = await anonToken();
-      const commentId = await postComment(threadId, token, "already out");
+      const authorToken = await anonToken();
+      const modToken = await userToken("moderator");
+      const commentId = await postComment(threadId, authorToken, "already out");
 
-      await act(commentId, "approve", token);
-      const response = await act(commentId, "reject", token);
+      await act(commentId, "approve", modToken);
+      const response = await act(commentId, "reject", modToken);
 
       expect(response.statusCode).toBe(409);
     });
 
     it("delete removes a published comment", async () => {
       const threadId = await createThread();
-      const token = await anonToken();
-      const commentId = await postComment(threadId, token, "published then gone");
+      const authorToken = await anonToken();
+      const modToken = await userToken("moderator");
+      const commentId = await postComment(threadId, authorToken, "published then gone");
 
-      await act(commentId, "approve", token);
+      await act(commentId, "approve", modToken);
 
-      const response = await act(commentId, "delete", token);
+      const response = await act(commentId, "delete", modToken);
 
       expect(response.statusCode).toBe(200);
       expect(response.json().status).toBe("deleted");
@@ -234,16 +293,44 @@ describe("Moderation API Seam Integration Tests", () => {
       );
     });
 
-    it("returns pending comments with thread and author context", async () => {
+    it("returns 403 Forbidden for guest or member roles", async () => {
+      const guestToken = await anonToken();
+      const memberToken = await userToken("member");
+
+      const resGuest = await app.inject({
+        method: "GET",
+        url: "/api/v1/moderation/queue",
+        headers: { authorization: `Bearer ${guestToken}` },
+      });
+      expect(resGuest.statusCode).toBe(403);
+      expect(resGuest.headers["content-type"]).toContain(
+        "application/problem+json"
+      );
+      expect(resGuest.json().title).toBe("Forbidden");
+
+      const resMember = await app.inject({
+        method: "GET",
+        url: "/api/v1/moderation/queue",
+        headers: { authorization: `Bearer ${memberToken}` },
+      });
+      expect(resMember.statusCode).toBe(403);
+      expect(resMember.headers["content-type"]).toContain(
+        "application/problem+json"
+      );
+      expect(resMember.json().title).toBe("Forbidden");
+    });
+
+    it("returns pending comments with thread and author context for moderator", async () => {
       const threadId = await createThread("context-post");
-      const token = await anonToken();
-      const firstId = await postComment(threadId, token, "first pending");
-      await postComment(threadId, token, "second pending");
+      const authorToken = await anonToken();
+      const modToken = await userToken("moderator");
+      const firstId = await postComment(threadId, authorToken, "first pending");
+      await postComment(threadId, authorToken, "second pending");
 
       const response = await app.inject({
         method: "GET",
         url: "/api/v1/moderation/queue",
-        headers: { authorization: `Bearer ${token}` },
+        headers: { authorization: `Bearer ${modToken}` },
       });
 
       expect(response.statusCode).toBe(200);
@@ -264,16 +351,17 @@ describe("Moderation API Seam Integration Tests", () => {
 
     it("excludes comments that have been approved", async () => {
       const threadId = await createThread();
-      const token = await anonToken();
-      const approvedId = await postComment(threadId, token, "approved soon");
-      await postComment(threadId, token, "still pending");
+      const authorToken = await anonToken();
+      const modToken = await userToken("moderator");
+      const approvedId = await postComment(threadId, authorToken, "approved soon");
+      await postComment(threadId, authorToken, "still pending");
 
-      await act(approvedId, "approve", token);
+      await act(approvedId, "approve", modToken);
 
       const response = await app.inject({
         method: "GET",
         url: "/api/v1/moderation/queue",
-        headers: { authorization: `Bearer ${token}` },
+        headers: { authorization: `Bearer ${modToken}` },
       });
 
       expect(response.statusCode).toBe(200);
@@ -285,15 +373,16 @@ describe("Moderation API Seam Integration Tests", () => {
 
     it("returns an empty list when nothing is pending", async () => {
       const threadId = await createThread();
-      const token = await anonToken();
-      const commentId = await postComment(threadId, token, "goes away");
+      const authorToken = await anonToken();
+      const adminToken = await userToken("admin");
+      const commentId = await postComment(threadId, authorToken, "goes away");
 
-      await act(commentId, "reject", token);
+      await act(commentId, "reject", adminToken);
 
       const response = await app.inject({
         method: "GET",
         url: "/api/v1/moderation/queue",
-        headers: { authorization: `Bearer ${token}` },
+        headers: { authorization: `Bearer ${adminToken}` },
       });
 
       expect(response.statusCode).toBe(200);

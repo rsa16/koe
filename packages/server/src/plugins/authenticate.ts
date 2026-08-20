@@ -1,5 +1,5 @@
 import { verifyAccessToken } from "@koe/auth";
-import { User, UserSchema } from "@koe/core";
+import { User, UserRole, UserSchema } from "@koe/core";
 import { Database, users } from "@koe/db";
 import { eq } from "drizzle-orm";
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
@@ -83,6 +83,28 @@ export default fp(async function authenticatePlugin(
       }
     }
   );
+
+  app.decorate(
+    "requireRole",
+    (allowedRoles: UserRole[]) => {
+      return async (request: FastifyRequest, reply: FastifyReply) => {
+        const authResult = await app.authenticate(request, reply);
+        if (reply.sent || authResult !== undefined) {
+          return;
+        }
+
+        if (!request.user || !allowedRoles.includes(request.user.role)) {
+          return app.sendProblem(
+            reply,
+            403,
+            "Forbidden",
+            "You do not have permission to access this resource",
+            request.url
+          );
+        }
+      };
+    }
+  );
 });
 
 declare module "fastify" {
@@ -99,5 +121,8 @@ declare module "fastify" {
       request: FastifyRequest,
       reply: FastifyReply
     ): Promise<void>;
+    requireRole(
+      allowedRoles: UserRole[]
+    ): (request: FastifyRequest, reply: FastifyReply) => Promise<void | FastifyReply>;
   }
 }
