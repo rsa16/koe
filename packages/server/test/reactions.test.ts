@@ -61,6 +61,16 @@ describe("Reactions API Seam Integration Tests", () => {
     return response.json();
   }
 
+  async function approveComment(commentId: string, token: string): Promise<void> {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/moderation/actions",
+      headers: { authorization: `Bearer ${token}` },
+      payload: { commentId, action: "approve" },
+    });
+    expect(response.statusCode).toBe(200);
+  }
+
   function reactRequest(commentId: string, token: string, emoji: unknown) {
     return app.inject({
       method: "POST",
@@ -146,6 +156,7 @@ describe("Reactions API Seam Integration Tests", () => {
     const threadId = await createThread();
     const token = await anonToken();
     const commentId = await postComment(threadId, token, "like me");
+    await approveComment(commentId, token);
 
     const response = await reactRequest(commentId, token, "👍");
     expect(response.statusCode).toBe(201);
@@ -166,6 +177,7 @@ describe("Reactions API Seam Integration Tests", () => {
     const threadId = await createThread();
     const token = await anonToken();
     const commentId = await postComment(threadId, token, "toggle me");
+    await approveComment(commentId, token);
 
     const first = await reactRequest(commentId, token, "👍");
     expect(first.statusCode).toBe(201);
@@ -182,6 +194,7 @@ describe("Reactions API Seam Integration Tests", () => {
     const token = await anonToken();
     const secondUserToken = await anonToken();
     const commentId = await postComment(threadId, token, "multi");
+    await approveComment(commentId, token);
 
     await reactRequest(commentId, token, "👍");
     await reactRequest(commentId, secondUserToken, "👍");
@@ -194,6 +207,7 @@ describe("Reactions API Seam Integration Tests", () => {
     const threadId = await createThread();
     const token = await anonToken();
     const commentId = await postComment(threadId, token, "multi emoji");
+    await approveComment(commentId, token);
 
     await reactRequest(commentId, token, "👍");
     await reactRequest(commentId, token, "❤️");
@@ -206,6 +220,7 @@ describe("Reactions API Seam Integration Tests", () => {
     const threadId = await createThread();
     const token = await anonToken();
     const commentId = await postComment(threadId, token, "delete me");
+    await approveComment(commentId, token);
 
     await reactRequest(commentId, token, "🎉");
 
@@ -279,6 +294,7 @@ describe("Reactions API Seam Integration Tests", () => {
     const threadId = await createThread();
     const token = await anonToken();
     const commentId = await postComment(threadId, token, "state");
+    await approveComment(commentId, token);
 
     await reactRequest(commentId, token, "❤️");
 

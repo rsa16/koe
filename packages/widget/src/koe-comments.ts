@@ -400,7 +400,7 @@ export class KoeComments extends LitElement {
         <div class="comment-body">${unsafeHTML(comment.bodyHtml)}</div>
         <p class="comment-meta">
           ${comment.status === "pending"
-            ? html`<span class="pending-badge">Pending</span>`
+            ? html`<span class="pending-badge">Pending approval</span>`
             : ""}
           Guest · ${new Date(comment.createdAt).toLocaleString()}
         </p>

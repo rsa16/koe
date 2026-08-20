@@ -137,7 +137,9 @@ describe("<koe-comments> widget", () => {
     expect(item.querySelector(".comment-body")?.textContent).toBe(
       "Hello from the widget!"
     );
-    expect(item.querySelector(".pending-badge")?.textContent).toBe("Pending");
+    expect(item.querySelector(".pending-badge")?.textContent).toBe(
+      "Pending approval"
+    );
     expect(element.shadowRoot!.querySelector(".empty")).toBeNull();
   });
 

@@ -206,6 +206,39 @@ export const CommentListResponseSchema = z.object({
 });
 export type CommentListResponse = z.infer<typeof CommentListResponseSchema>;
 
+// Moderation schemas
+export const ModerationActionVerbSchema = z.enum(["approve", "reject", "delete"]);
+export type ModerationActionVerb = z.infer<typeof ModerationActionVerbSchema>;
+
+export const CreateModerationActionBodySchema = z.object({
+  commentId: z.string().uuid(),
+  action: ModerationActionVerbSchema,
+});
+export type CreateModerationActionBody = z.infer<
+  typeof CreateModerationActionBodySchema
+>;
+
+export const ThreadContextSchema = ThreadSchema.pick({
+  id: true,
+  externalRef: true,
+  title: true,
+  url: true,
+});
+export type ThreadContext = z.infer<typeof ThreadContextSchema>;
+
+export const ModerationQueueItemSchema = CommentSchema.extend({
+  thread: ThreadContextSchema,
+  authorName: z.string().nullable(),
+});
+export type ModerationQueueItem = z.infer<typeof ModerationQueueItemSchema>;
+
+export const ModerationQueueResponseSchema = z.object({
+  comments: z.array(ModerationQueueItemSchema),
+});
+export type ModerationQueueResponse = z.infer<
+  typeof ModerationQueueResponseSchema
+>;
+
 // Auth schemas
 export const AnonymousAuthResponseSchema = z.object({
   accessToken: z.string(),

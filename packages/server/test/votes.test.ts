@@ -61,6 +61,16 @@ describe("Votes API Seam Integration Tests", () => {
     return response.json();
   }
 
+  async function approveComment(commentId: string, token: string): Promise<void> {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/moderation/actions",
+      headers: { authorization: `Bearer ${token}` },
+      payload: { commentId, action: "approve" },
+    });
+    expect(response.statusCode).toBe(200);
+  }
+
   function voteRequest(
     commentId: string,
     token: string,
@@ -128,6 +138,7 @@ describe("Votes API Seam Integration Tests", () => {
     const threadId = await createThread();
     const token = await anonToken();
     const commentId = await postComment(threadId, token, "upvote me");
+    await approveComment(commentId, token);
 
     const response = await voteRequest(commentId, token, 1);
     expect(response.statusCode).toBe(201);
@@ -147,6 +158,7 @@ describe("Votes API Seam Integration Tests", () => {
     const threadId = await createThread();
     const token = await anonToken();
     const commentId = await postComment(threadId, token, "downvote me");
+    await approveComment(commentId, token);
 
     const response = await voteRequest(commentId, token, -1);
     expect(response.statusCode).toBe(201);
@@ -160,6 +172,7 @@ describe("Votes API Seam Integration Tests", () => {
     const threadId = await createThread();
     const token = await anonToken();
     const commentId = await postComment(threadId, token, "toggle me");
+    await approveComment(commentId, token);
 
     const first = await voteRequest(commentId, token, 1);
     expect(first.statusCode).toBe(201);
@@ -176,6 +189,7 @@ describe("Votes API Seam Integration Tests", () => {
     const threadId = await createThread();
     const token = await anonToken();
     const commentId = await postComment(threadId, token, "switch me");
+    await approveComment(commentId, token);
 
     await voteRequest(commentId, token, 1);
     const switched = await voteRequest(commentId, token, -1);
@@ -191,6 +205,7 @@ describe("Votes API Seam Integration Tests", () => {
     const threadId = await createThread();
     const token = await anonToken();
     const commentId = await postComment(threadId, token, "one per user");
+    await approveComment(commentId, token);
 
     const secondUserToken = await anonToken();
     await voteRequest(commentId, token, 1);
@@ -204,6 +219,7 @@ describe("Votes API Seam Integration Tests", () => {
     const threadId = await createThread();
     const token = await anonToken();
     const commentId = await postComment(threadId, token, "delete me");
+    await approveComment(commentId, token);
 
     await voteRequest(commentId, token, 1);
 
@@ -243,6 +259,7 @@ describe("Votes API Seam Integration Tests", () => {
     const threadId = await createThread();
     const token = await anonToken();
     const commentId = await postComment(threadId, token, "state");
+    await approveComment(commentId, token);
 
     await voteRequest(commentId, token, 1);
 
@@ -258,6 +275,7 @@ describe("Votes API Seam Integration Tests", () => {
     const token = await anonToken();
     const otherToken = await anonToken();
     const commentId = await postComment(threadId, token, "no vote");
+    await approveComment(commentId, token);
 
     await voteRequest(commentId, token, -1);
 

@@ -7,7 +7,7 @@ import {
 } from "@koe/core";
 import { comments, Database, reactions, threads, votes } from "@koe/db";
 import { renderMarkdown } from "@koe/renderer";
-import { and, eq, gt, inArray, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, or, sql } from "drizzle-orm";
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { computeReplyPosition } from "../replies.js";
 
@@ -174,9 +174,20 @@ export default async function commentsRoutes(
       );
     }
 
+    const visibleFilter = request.user
+      ? or(
+          eq(comments.status, "published"),
+          and(
+            eq(comments.status, "pending"),
+            eq(comments.authorId, request.user.id)
+          )
+        )
+      : eq(comments.status, "published");
+
     const whereRoots = and(
       eq(comments.threadId, threadId),
-      eq(comments.depth, 0)
+      eq(comments.depth, 0),
+      visibleFilter
     );
     const roots = await db
       .select()
@@ -190,7 +201,9 @@ export default async function commentsRoutes(
     const descendants = await db
       .select()
       .from(comments)
-      .where(and(eq(comments.threadId, threadId), gt(comments.depth, 0)))
+      .where(
+        and(eq(comments.threadId, threadId), gt(comments.depth, 0), visibleFilter)
+      )
       .orderBy(comments.createdAt, comments.id);
 
     let userVotes: Map<string, 1 | -1> | undefined;

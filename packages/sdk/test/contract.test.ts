@@ -85,6 +85,32 @@ const reaction = {
   updatedAt: ISO_DATE,
 };
 
+const moderationQueueItem = {
+  id: comment.id,
+  threadId: comment.threadId,
+  authorId: comment.authorId,
+  parentId: comment.parentId,
+  bodyMd: comment.bodyMd,
+  bodyHtml: comment.bodyHtml,
+  status: "pending",
+  depth: 0,
+  path: "",
+  upvotes: 0,
+  downvotes: 0,
+  reactionTotals: {},
+  metadata: {},
+  editedAt: null,
+  createdAt: ISO_DATE,
+  updatedAt: ISO_DATE,
+  thread: {
+    id: thread.id,
+    externalRef: thread.externalRef,
+    title: thread.title,
+    url: thread.url,
+  },
+  authorName: "Alice",
+};
+
 interface RecordedRequest {
   url: string;
   init: RequestInit;
@@ -370,6 +396,51 @@ describe("Koe SDK Contract Tests", () => {
     const result = await client.comments.list(thread.id);
 
     expect(result.comments[0].userVote).toBe(1);
+  });
+
+  it("moderation.queue gets the pending queue and parses thread and author context", async () => {
+    const { fetchFn, calls } = mockFetch(() => ({
+      status: 200,
+      body: { comments: [moderationQueueItem] },
+    }));
+    const client = createKoeClient({ baseUrl: "http://localhost:3000", fetch: fetchFn });
+
+    const result = await client.moderation.queue("some-token");
+
+    expect(calls[0].url).toBe("http://localhost:3000/api/v1/moderation/queue");
+    expect(calls[0].init.method).toBe("GET");
+    expect(calls[0].init.headers).toMatchObject({
+      authorization: "Bearer some-token",
+    });
+    expect(result.comments).toHaveLength(1);
+    expect(result.comments[0].bodyMd).toBe("Hello **world**");
+    expect(result.comments[0].thread.externalRef).toBe("my-post");
+    expect(result.comments[0].thread.id).toBe(thread.id);
+    expect(result.comments[0].authorName).toBe("Alice");
+    expect(result.comments[0].createdAt).toBeInstanceOf(Date);
+  });
+
+  it("moderation.act posts the action and parses the updated comment", async () => {
+    const { fetchFn, calls } = mockFetch(() => ({
+      status: 200,
+      body: { ...comment, status: "published", children: [] },
+    }));
+    const client = createKoeClient({ baseUrl: "http://localhost:3000", fetch: fetchFn });
+
+    const result = await client.moderation.act(comment.id, "approve", "some-token");
+
+    expect(calls[0].url).toBe("http://localhost:3000/api/v1/moderation/actions");
+    expect(calls[0].init.method).toBe("POST");
+    expect(calls[0].init.headers).toMatchObject({
+      authorization: "Bearer some-token",
+      "content-type": "application/json",
+    });
+    expect(JSON.parse(String(calls[0].init.body))).toEqual({
+      commentId: comment.id,
+      action: "approve",
+    });
+    expect(result.status).toBe("published");
+    expect(result.id).toBe(comment.id);
   });
 
   it("throws KoeApiError with problem details on a non-ok response", async () => {

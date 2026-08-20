@@ -52,6 +52,19 @@ describe("Comments API Seam Integration Tests", () => {
     return response.json();
   }
 
+  async function approveComment(
+    commentId: string,
+    token: string
+  ): Promise<void> {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/moderation/actions",
+      headers: { authorization: `Bearer ${token}` },
+      payload: { commentId, action: "approve" },
+    });
+    expect(response.statusCode).toBe(200);
+  }
+
   it("POST /api/v1/threads/:id/comments requires authentication", async () => {
     const threadId = await createThread();
 
@@ -146,7 +159,7 @@ describe("Comments API Seam Integration Tests", () => {
     expect(body.bodyHtml).not.toContain('href="https://ok.dev">raw</a>');
   });
 
-  it("E2E: a comment can be posted and read back", async () => {
+  it("E2E: a comment can be posted, approved, and read back", async () => {
     const threadId = await createThread("e2e-post");
     const token = await anonToken();
 
@@ -157,6 +170,9 @@ describe("Comments API Seam Integration Tests", () => {
       payload: { bodyMd: "First comment!" },
     });
     expect(postResponse.statusCode).toBe(201);
+    expect(postResponse.json().status).toBe("pending");
+
+    await approveComment(postResponse.json().id, token);
 
     const listResponse = await app.inject({
       method: "GET",
@@ -168,10 +184,61 @@ describe("Comments API Seam Integration Tests", () => {
     expect(list.comments).toHaveLength(1);
     expect(list.comments[0].bodyMd).toBe("First comment!");
     expect(list.comments[0].id).toBe(postResponse.json().id);
-    expect(list.comments[0].status).toBe("pending");
+    expect(list.comments[0].status).toBe("published");
 
     const parseResult = CommentListResponseSchema.safeParse(list);
     expect(parseResult.success).toBe(true);
+  });
+
+  it("GET hides pending comments from anonymous readers but shows them to their author", async () => {
+    const threadId = await createThread();
+    const authorToken = await anonToken();
+
+    const comment = await postComment(threadId, authorToken, "my pending");
+
+    const anonList = await app.inject({
+      method: "GET",
+      url: `/api/v1/threads/${threadId}/comments`,
+    });
+    expect(anonList.json().total).toBe(0);
+    expect(anonList.json().comments).toHaveLength(0);
+
+    const otherToken = await anonToken();
+    const otherList = await app.inject({
+      method: "GET",
+      url: `/api/v1/threads/${threadId}/comments`,
+      headers: { authorization: `Bearer ${otherToken}` },
+    });
+    expect(otherList.json().total).toBe(0);
+
+    const authorList = await app.inject({
+      method: "GET",
+      url: `/api/v1/threads/${threadId}/comments`,
+      headers: { authorization: `Bearer ${authorToken}` },
+    });
+    expect(authorList.statusCode).toBe(200);
+    expect(authorList.json().total).toBe(1);
+    expect(authorList.json().comments[0].id).toBe(comment.id);
+    expect(authorList.json().comments[0].status).toBe("pending");
+  });
+
+  it("GET shows approved comments to every reader", async () => {
+    const threadId = await createThread();
+    const authorToken = await anonToken();
+    const otherToken = await anonToken();
+
+    const comment = await postComment(threadId, authorToken, "approved");
+    await approveComment(comment.id as string, authorToken);
+
+    for (const token of [undefined, otherToken, authorToken]) {
+      const list = await app.inject({
+        method: "GET",
+        url: `/api/v1/threads/${threadId}/comments`,
+        ...(token ? { headers: { authorization: `Bearer ${token}` } } : {}),
+      });
+      expect(list.json().total).toBe(1);
+      expect(list.json().comments[0].status).toBe("published");
+    }
   });
 
   it("POST increments the thread comment count", async () => {
@@ -306,14 +373,17 @@ describe("Comments API Seam Integration Tests", () => {
 
     const root = await postComment(threadId, token, "root");
     const child1 = await postComment(threadId, token, "child1", root.id as string);
-    await postComment(threadId, token, "child2", root.id as string);
+    const child2 = await postComment(threadId, token, "child2", root.id as string);
     const grandchild = await postComment(
       threadId,
       token,
       "grandchild",
       child1.id as string
     );
-    await postComment(threadId, token, "other");
+    const other = await postComment(threadId, token, "other");
+    for (const c of [root, child1, child2, grandchild, other]) {
+      await approveComment(c.id as string, token);
+    }
 
     const listResponse = await app.inject({
       method: "GET",
@@ -343,6 +413,7 @@ describe("Comments API Seam Integration Tests", () => {
     const threadId = await createThread();
     const token = await anonToken();
 
+    const posted: string[] = [];
     for (const bodyMd of ["One", "Two", "Three"]) {
       const response = await app.inject({
         method: "POST",
@@ -351,6 +422,10 @@ describe("Comments API Seam Integration Tests", () => {
         payload: { bodyMd },
       });
       expect(response.statusCode).toBe(201);
+      posted.push(response.json().id);
+    }
+    for (const id of posted) {
+      await approveComment(id, token);
     }
 
     const pageOne = await app.inject({

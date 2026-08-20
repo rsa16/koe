@@ -9,6 +9,10 @@ import {
   CreateCommentBody,
   DEFAULT_EMOJI_ALLOWLIST,
   GetThreadByRefQuery,
+  ModerationActionVerb,
+  ModerationQueueItem,
+  ModerationQueueResponse,
+  ModerationQueueResponseSchema,
   Reaction,
   ReactionSchema,
   Thread,
@@ -29,6 +33,9 @@ export type {
   CommentNode,
   CreateCommentBody,
   GetThreadByRefQuery,
+  ModerationActionVerb,
+  ModerationQueueItem,
+  ModerationQueueResponse,
   Reaction,
   ReactionTotals,
   Thread,
@@ -102,6 +109,14 @@ export interface KoeClient {
       token?: string
     ): Promise<Reaction | null>;
     unreact(commentId: string, emoji: string, token?: string): Promise<void>;
+  };
+  moderation: {
+    queue(token?: string): Promise<ModerationQueueResponse>;
+    act(
+      commentId: string,
+      action: ModerationActionVerb,
+      token?: string
+    ): Promise<Comment>;
   };
 }
 
@@ -241,6 +256,19 @@ export function createKoeClient(options: KoeClientOptions): KoeClient {
           { method: "DELETE", token }
         );
       },
+    },
+    moderation: {
+      queue: (token) =>
+        request(ModerationQueueResponseSchema, "/api/v1/moderation/queue", {
+          method: "GET",
+          token,
+        }),
+      act: (commentId, action, token) =>
+        request(CommentSchema, "/api/v1/moderation/actions", {
+          method: "POST",
+          body: { commentId, action },
+          token,
+        }),
     },
   };
 }
