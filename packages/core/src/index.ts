@@ -28,9 +28,9 @@ export const UserSchema = z.object({
   email: z.string().email().nullable(),
   avatarUrl: z.string().url().nullable(),
   metadata: z.record(z.unknown()).default({}),
-  createdAt: z.date(),
-  updatedAt: z.date(),
-  lastActiveAt: z.date(),
+  createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
+  lastActiveAt: z.coerce.date(),
 });
 export type User = z.infer<typeof UserSchema>;
 
@@ -40,8 +40,8 @@ export const IdentitySchema = z.object({
   provider: IdentityProviderSchema,
   providerUserId: z.string(),
   profileData: z.record(z.unknown()).default({}),
-  createdAt: z.date(),
-  updatedAt: z.date(),
+  createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
 });
 export type Identity = z.infer<typeof IdentitySchema>;
 
@@ -55,8 +55,8 @@ export const ThreadSchema = z.object({
   preModeration: z.boolean(),
   commentCount: z.number().int().nonnegative(),
   metadata: z.record(z.unknown()).default({}),
-  createdAt: z.date(),
-  updatedAt: z.date(),
+  createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
 });
 export type Thread = z.infer<typeof ThreadSchema>;
 
@@ -85,11 +85,35 @@ export const CommentSchema = z.object({
   upvotes: z.number().int().default(0),
   downvotes: z.number().int().default(0),
   metadata: z.record(z.unknown()).default({}),
-  editedAt: z.date().nullable(),
-  createdAt: z.date(),
-  updatedAt: z.date(),
+  editedAt: z.coerce.date().nullable(),
+  createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
 });
 export type Comment = z.infer<typeof CommentSchema>;
+
+export const CreateCommentParamsSchema = z.object({
+  id: z.string().uuid(),
+});
+export type CreateCommentParams = z.infer<typeof CreateCommentParamsSchema>;
+
+export const CreateCommentBodySchema = z.object({
+  bodyMd: z.string().min(1).max(10000),
+});
+export type CreateCommentBody = z.infer<typeof CreateCommentBodySchema>;
+
+export const CommentListQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+});
+export type CommentListQuery = z.infer<typeof CommentListQuerySchema>;
+
+export const CommentListResponseSchema = z.object({
+  comments: z.array(CommentSchema),
+  total: z.number().int().nonnegative(),
+  page: z.number().int().min(1),
+  pageSize: z.number().int().min(1),
+});
+export type CommentListResponse = z.infer<typeof CommentListResponseSchema>;
 
 // Auth schemas
 export const AnonymousAuthResponseSchema = z.object({
@@ -117,9 +141,9 @@ export const SessionSchema = z.object({
   id: z.string().uuid(),
   userId: z.string().uuid(),
   refreshTokenHash: z.string().nullable(),
-  expiresAt: z.date(),
-  createdAt: z.date(),
-  updatedAt: z.date(),
+  expiresAt: z.coerce.date(),
+  createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
 });
 export type Session = z.infer<typeof SessionSchema>;
 

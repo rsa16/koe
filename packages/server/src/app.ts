@@ -11,6 +11,7 @@ import authenticatePlugin from "./plugins/authenticate.js";
 import healthRoutes from "./routes/health.js";
 import authRoutes from "./routes/auth.js";
 import threadsRoutes from "./routes/threads.js";
+import commentsRoutes from "./routes/comments.js";
 
 export interface BuildAppOptions {
   db: Database;
@@ -46,6 +47,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     googleOAuth,
   });
   app.register(threadsRoutes, { db: options.db });
+  app.register(commentsRoutes, { db: options.db });
 
   return app;
 }

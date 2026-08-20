@@ -1,0 +1,31 @@
+{
+  "name": "@koe/widget",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch --preserveWatchOutput",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@koe/sdk": "*",
+    "lit": "^3.2.1"
+  },
+  "devDependencies": {
+    "@koe/db": "*",
+    "@koe/server": "*",
+    "@types/node": "^22.13.9",
+    "jsdom": "^26.0.0",
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.7"
+  }
+}
