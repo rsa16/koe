@@ -72,6 +72,8 @@ export const GetThreadByRefQuerySchema = z.object({
 export type GetThreadByRefQuery = z.infer<typeof GetThreadByRefQuerySchema>;
 
 // Comment schemas
+export const COMMENT_DEPTH_CAP = 4;
+
 export const CommentSchema = z.object({
   id: z.string().uuid(),
   threadId: z.string().uuid(),
@@ -80,7 +82,7 @@ export const CommentSchema = z.object({
   bodyMd: z.string(),
   bodyHtml: z.string(),
   status: CommentStatusSchema,
-  depth: z.number().int().min(0).max(4),
+  depth: z.number().int().min(0).max(COMMENT_DEPTH_CAP),
   path: z.string(),
   upvotes: z.number().int().default(0),
   downvotes: z.number().int().default(0),
@@ -91,6 +93,12 @@ export const CommentSchema = z.object({
 });
 export type Comment = z.infer<typeof CommentSchema>;
 
+export type CommentNode = Comment & { children: CommentNode[] };
+export const CommentNodeSchema: z.ZodType<CommentNode, z.ZodTypeDef, unknown> =
+  CommentSchema.extend({
+    children: z.lazy(() => z.array(CommentNodeSchema)),
+  });
+
 export const CreateCommentParamsSchema = z.object({
   id: z.string().uuid(),
 });
@@ -98,6 +106,7 @@ export type CreateCommentParams = z.infer<typeof CreateCommentParamsSchema>;
 
 export const CreateCommentBodySchema = z.object({
   bodyMd: z.string().min(1).max(10000),
+  parentId: z.string().uuid().optional(),
 });
 export type CreateCommentBody = z.infer<typeof CreateCommentBodySchema>;
 
@@ -108,7 +117,7 @@ export const CommentListQuerySchema = z.object({
 export type CommentListQuery = z.infer<typeof CommentListQuerySchema>;
 
 export const CommentListResponseSchema = z.object({
-  comments: z.array(CommentSchema),
+  comments: z.array(CommentNodeSchema),
   total: z.number().int().nonnegative(),
   page: z.number().int().min(1),
   pageSize: z.number().int().min(1),

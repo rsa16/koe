@@ -45,6 +45,25 @@ const comment = {
   editedAt: null,
   createdAt: ISO_DATE,
   updatedAt: ISO_DATE,
+  children: [],
+};
+
+const createdReply = {
+  id: "423e4567-e89b-12d3-a456-426614174000",
+  threadId: thread.id,
+  authorId: guestUser.id,
+  parentId: comment.id,
+  bodyMd: "A **reply**",
+  bodyHtml: "",
+  status: "pending",
+  depth: 1,
+  path: `/${comment.id}`,
+  upvotes: 0,
+  downvotes: 0,
+  metadata: {},
+  editedAt: null,
+  createdAt: ISO_DATE,
+  updatedAt: ISO_DATE,
 };
 
 interface RecordedRequest {
@@ -119,7 +138,23 @@ describe("Koe SDK Contract Tests", () => {
   it("comments.list parses a paginated comment list with Date coercion", async () => {
     const { fetchFn, calls } = mockFetch(() => ({
       status: 200,
-      body: { comments: [comment], total: 1, page: 1, pageSize: 20 },
+      body: {
+        comments: [
+          {
+            ...comment,
+            children: [
+              {
+                ...createdReply,
+                bodyMd: "A **reply**",
+                children: [],
+              },
+            ],
+          },
+        ],
+        total: 1,
+        page: 1,
+        pageSize: 20,
+      },
     }));
     const client = createKoeClient({
       baseUrl: "http://localhost:3000",
@@ -139,6 +174,9 @@ describe("Koe SDK Contract Tests", () => {
     expect(result.comments).toHaveLength(1);
     expect(result.comments[0].bodyMd).toBe("Hello **world**");
     expect(result.comments[0].createdAt).toBeInstanceOf(Date);
+    expect(result.comments[0].children).toHaveLength(1);
+    expect(result.comments[0].children[0].parentId).toBe(comment.id);
+    expect(result.comments[0].children[0].depth).toBe(1);
   });
 
   it("comments.create posts the body as JSON and parses the created comment", async () => {
@@ -164,6 +202,27 @@ describe("Koe SDK Contract Tests", () => {
     });
     expect(result.status).toBe("pending");
     expect(result.id).toBe(comment.id);
+  });
+
+  it("comments.create forwards an optional parentId for replies", async () => {
+    const { fetchFn, calls } = mockFetch(() => ({
+      status: 201,
+      body: createdReply,
+    }));
+    const client = createKoeClient({ baseUrl: "http://localhost:3000", fetch: fetchFn });
+
+    const result = await client.comments.create(
+      thread.id,
+      { bodyMd: "A reply", parentId: comment.id },
+      "some-token"
+    );
+
+    expect(calls[0].init.method).toBe("POST");
+    expect(JSON.parse(String(calls[0].init.body))).toEqual({
+      bodyMd: "A reply",
+      parentId: comment.id,
+    });
+    expect(result.parentId).toBe(comment.id);
   });
 
   it("throws KoeApiError with problem details on a non-ok response", async () => {

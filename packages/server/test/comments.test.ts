@@ -36,6 +36,22 @@ describe("Comments API Seam Integration Tests", () => {
     return response.json().accessToken;
   }
 
+  async function postComment(
+    threadId: string,
+    token: string,
+    bodyMd: string,
+    parentId?: string
+  ): Promise<Record<string, unknown>> {
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/v1/threads/${threadId}/comments`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { bodyMd, ...(parentId ? { parentId } : {}) },
+    });
+    expect(response.statusCode).toBe(201);
+    return response.json();
+  }
+
   it("POST /api/v1/threads/:id/comments requires authentication", async () => {
     const threadId = await createThread();
 
@@ -182,6 +198,145 @@ describe("Comments API Seam Integration Tests", () => {
     });
     expect(threadResponse.statusCode).toBe(200);
     expect(threadResponse.json().commentCount).toBe(2);
+  });
+
+  it("POST /api/v1/threads/:id/comments creates a reply with computed depth and path", async () => {
+    const threadId = await createThread();
+    const token = await anonToken();
+
+    const root = await postComment(threadId, token, "root");
+    const reply = await postComment(threadId, token, "reply", root.id as string);
+
+    expect(reply.parentId).toBe(root.id);
+    expect(reply.depth).toBe(1);
+    expect(reply.path).toBe(`/${root.id}`);
+  });
+
+  it("POST /api/v1/threads/:id/comments appends ancestors to the materialized path", async () => {
+    const threadId = await createThread();
+    const token = await anonToken();
+
+    const root = await postComment(threadId, token, "root");
+    const d1 = await postComment(threadId, token, "d1", root.id as string);
+    const d2 = await postComment(threadId, token, "d2", d1.id as string);
+    const d3 = await postComment(threadId, token, "d3", d2.id as string);
+
+    expect(d1.path).toBe(`/${root.id}`);
+    expect(d2.path).toBe(`${d1.path}/${d1.id}`);
+    expect(d3.path).toBe(`${d2.path}/${d2.id}`);
+    expect(d3.depth).toBe(3);
+  });
+
+  it("POST /api/v1/threads/:id/comments returns 404 for an unknown parent comment", async () => {
+    const threadId = await createThread();
+    const token = await anonToken();
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/v1/threads/${threadId}/comments`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        bodyMd: "orphan reply",
+        parentId: "123e4567-e89b-12d3-a456-426614174000",
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.headers["content-type"]).toContain("application/problem+json");
+    expect(response.json().detail).toBe("Parent comment does not exist");
+  });
+
+  it("POST /api/v1/threads/:id/comments rejects a parent from another thread", async () => {
+    const firstThreadId = await createThread("first-thread");
+    const secondThreadId = await createThread("second-thread");
+    const token = await anonToken();
+
+    const root = await postComment(firstThreadId, token, "root");
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/v1/threads/${secondThreadId}/comments`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        bodyMd: "cross-thread reply",
+        parentId: root.id as string,
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.headers["content-type"]).toContain("application/problem+json");
+  });
+
+  it("POST /api/v1/threads/:id/comments rejects a malformed parent_id", async () => {
+    const threadId = await createThread();
+    const token = await anonToken();
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/v1/threads/${threadId}/comments`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { bodyMd: "bad parent", parentId: "not-a-uuid" },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.headers["content-type"]).toContain("application/problem+json");
+  });
+
+  it("POST /api/v1/threads/:id/comments flattens a reply to a depth-4 comment onto its depth-3 ancestor", async () => {
+    const threadId = await createThread();
+    const token = await anonToken();
+
+    const root = await postComment(threadId, token, "root");
+    const d1 = await postComment(threadId, token, "d1", root.id as string);
+    const d2 = await postComment(threadId, token, "d2", d1.id as string);
+    const d3 = await postComment(threadId, token, "d3", d2.id as string);
+    const d4 = await postComment(threadId, token, "d4", d3.id as string);
+    expect(d4.depth).toBe(4);
+
+    const flattened = await postComment(threadId, token, "flat", d4.id as string);
+
+    expect(flattened.depth).toBe(4);
+    expect(flattened.parentId).toBe(d3.id);
+    expect(flattened.path).toBe(d4.path);
+  });
+
+  it("GET /api/v1/threads/:id/comments returns nested subtrees inline, paginating top-level comments", async () => {
+    const threadId = await createThread("tree-thread");
+    const token = await anonToken();
+
+    const root = await postComment(threadId, token, "root");
+    const child1 = await postComment(threadId, token, "child1", root.id as string);
+    await postComment(threadId, token, "child2", root.id as string);
+    const grandchild = await postComment(
+      threadId,
+      token,
+      "grandchild",
+      child1.id as string
+    );
+    await postComment(threadId, token, "other");
+
+    const listResponse = await app.inject({
+      method: "GET",
+      url: `/api/v1/threads/${threadId}/comments?page=1&pageSize=1`,
+    });
+    expect(listResponse.statusCode).toBe(200);
+    const body = listResponse.json();
+
+    expect(body.total).toBe(2);
+    expect(body.comments).toHaveLength(1);
+    const rootNode = body.comments[0];
+    expect(rootNode.bodyMd).toBe("root");
+    expect(rootNode.children).toHaveLength(2);
+
+    const firstChild = rootNode.children.find(
+      (c: { bodyMd: string }) => c.bodyMd === "child1"
+    );
+    expect(firstChild.children).toHaveLength(1);
+    expect(firstChild.children[0].bodyMd).toBe("grandchild");
+    expect(firstChild.children[0].parentId).toBe(firstChild.id);
+
+    const parseResult = CommentListResponseSchema.safeParse(body);
+    expect(parseResult.success).toBe(true);
   });
 
   it("GET /api/v1/threads/:id/comments returns a flat paginated list", async () => {

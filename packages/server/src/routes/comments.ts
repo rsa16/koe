@@ -7,8 +7,9 @@ import {
 } from "@koe/core";
 import { comments, Database, threads } from "@koe/db";
 import { renderMarkdown } from "@koe/renderer";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, gt, sql } from "drizzle-orm";
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { computeReplyPosition } from "../replies.js";
 
 export interface CommentsRoutesOptions {
   db: Database;
@@ -68,17 +69,43 @@ export default async function commentsRoutes(
     }
 
     const status = existingThreads[0].preModeration ? "pending" : "published";
+
+    const parentId = bodyParsed.data.parentId;
+    let parent: typeof comments.$inferSelect | null = null;
+    if (parentId) {
+      const parents = await db
+        .select()
+        .from(comments)
+        .where(and(eq(comments.id, parentId), eq(comments.threadId, threadId)))
+        .limit(1);
+      if (parents.length === 0) {
+        return app.sendProblem(
+          reply,
+          404,
+          "Not Found",
+          "Parent comment does not exist",
+          request.url
+        );
+      }
+      parent = parents[0];
+    }
+
+    const position = computeReplyPosition(
+      parent ? { id: parent.id, depth: parent.depth, path: parent.path } : null
+    );
+
     const created = await db.transaction(async (tx: Database) => {
       const [comment] = await tx
         .insert(comments)
         .values({
           threadId,
           authorId: request.user!.id,
+          parentId: position.parentId,
           bodyMd: bodyParsed.data.bodyMd,
           bodyHtml: renderMarkdown(bodyParsed.data.bodyMd),
           status,
-          depth: 0,
-          path: "",
+          depth: position.depth,
+          path: position.path,
           upvotes: 0,
           downvotes: 0,
           metadata: {},
@@ -98,7 +125,7 @@ export default async function commentsRoutes(
       .send(CommentSchema.parse(created));
   };
 
-  // Comments: list (flat, paginated)
+  // Comments: list (nested tree, paginated top-level)
   // GET /api/v1/threads/:id/comments
   const listCommentsHandler = async (
     request: FastifyRequest,
@@ -147,21 +174,32 @@ export default async function commentsRoutes(
       );
     }
 
-    const where = eq(comments.threadId, threadId);
-    const rows = await db
+    const whereRoots = and(
+      eq(comments.threadId, threadId),
+      eq(comments.depth, 0)
+    );
+    const roots = await db
       .select()
       .from(comments)
-      .where(where)
+      .where(whereRoots)
       .orderBy(comments.createdAt, comments.id)
       .limit(pageSize)
       .offset((page - 1) * pageSize);
-    const total = await db.$count(comments, where);
+    const total = await db.$count(comments, whereRoots);
+
+    const descendants = await db
+      .select()
+      .from(comments)
+      .where(and(eq(comments.threadId, threadId), gt(comments.depth, 0)))
+      .orderBy(comments.createdAt, comments.id);
+
+    const tree = buildCommentTree([...roots, ...descendants]);
 
     return reply
       .status(200)
       .send(
         CommentListResponseSchema.parse({
-          comments: rows,
+          comments: tree,
           total,
           page,
           pageSize,
@@ -175,4 +213,32 @@ export default async function commentsRoutes(
     createCommentHandler
   );
   app.get("/api/v1/threads/:id/comments", listCommentsHandler);
+}
+
+type CommentRow = typeof comments.$inferSelect;
+interface CommentTreeNode extends CommentRow {
+  children: CommentTreeNode[];
+}
+
+function buildCommentTree(rows: CommentRow[]): CommentTreeNode[] {
+  const byParent = new Map<string | null, CommentTreeNode[]>();
+  for (const row of rows) {
+    const node: CommentTreeNode = { ...row, children: [] };
+    const siblings = byParent.get(node.parentId);
+    if (siblings) {
+      siblings.push(node);
+    } else {
+      byParent.set(node.parentId, [node]);
+    }
+  }
+
+  function attach(parentId: string | null): CommentTreeNode[] {
+    const children = byParent.get(parentId) ?? [];
+    for (const child of children) {
+      child.children = attach(child.id);
+    }
+    return children;
+  }
+
+  return attach(null);
 }

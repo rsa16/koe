@@ -20,6 +20,7 @@ export type {
   Comment,
   CommentListQuery,
   CommentListResponse,
+  CommentNode,
   CreateCommentBody,
   GetThreadByRefQuery,
   Thread,
