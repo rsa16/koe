@@ -49,6 +49,7 @@ export default async function authRoutes(
   };
 
   // Auth: Anonymous guest login
+  // POST /api/v1/auth/anonymous
   const anonymousHandler = async (
     _request: FastifyRequest,
     reply: FastifyReply
@@ -82,11 +83,13 @@ export default async function authRoutes(
   };
 
   // Auth: Current user profile
+  // GET /api/v1/auth/me
   const meHandler = async (request: FastifyRequest, reply: FastifyReply) => {
     return reply.status(200).send(UserSchema.parse(request.user));
   };
 
   // Auth: Google OAuth start
+  // GET /api/v1/auth/oauth/google
   const oauthGoogleHandler = async (
     request: FastifyRequest,
     reply: FastifyReply
@@ -131,6 +134,7 @@ export default async function authRoutes(
   };
 
   // Auth: Google OAuth callback
+  // GET /api/v1/auth/oauth/google/callback
   const oauthGoogleCallbackHandler = async (
     request: FastifyRequest,
     reply: FastifyReply

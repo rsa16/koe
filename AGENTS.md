@@ -14,8 +14,8 @@ Self-hosted headless commenting backend (Fastify + Drizzle ORM + PostgreSQL) wit
 - `packages/core`: Shared Zod schemas, TypeScript types, and event definitions (contracts consumed by server & SDK).
 - `packages/db`: Drizzle ORM schema, migration SQL (`drizzle/`), migration runner (`src/migrate.ts`), and PGlite in-memory test DB (`src/mem.ts`).
 - `packages/auth`: Bearer access-token signing/verification and admin session-cookie logic.
-- `packages/server`: Fastify REST API (`/api/v1`).
-- `apps/`: Planned web widget (Lit) and admin dashboard (React + MUI).
+- `packages/server`: Fastify REST API (`/api/v1`). Route registration lives in `src/routes/` (one file per domain group: `health.ts`, `auth.ts`, `threads.ts`); new endpoints for tickets 04–19 go there. Shared plumbing lives in `src/plugins/` — `problem-details.ts` decorates `app.sendProblem` (RFC 9457), `authenticate.ts` decorates `app.authenticate` (bearer preHandler). OAuth helpers in `src/oauth.ts`, `src/user-accounts.ts`, `src/oauth-render.ts`.
+- `apps/`: Planned web widget (Lit) and admin dashboard (React + MUI). Not created yet.
 
 ## Development & Testing Commands
 
@@ -35,8 +35,10 @@ npm run test
 npm --workspace=@koe/server test
 npx vitest run packages/server/test/threads.test.ts
 
-# Dev live-reload (Turborepo watch mode)
+# Dev live-reload (Turborepo watch mode; libs use tsc --watch, server uses tsx watch)
 npm run dev
+
+# NOTE: npm run lint is NOT configured — no package defines a lint task. Use typecheck + test.
 
 # Drizzle migrations
 npm --workspace=@koe/db run db:generate   # Generate migration from schema changes
@@ -52,5 +54,5 @@ npm --workspace=@koe/db run db:migrate    # Run migrations against $DATABASE_URL
 ## Workflow & Implementation
 
 - **Tickets**: Tracer-bullet vertical slices located in `.scratch/headless-comments/issues/`.
-- **Execution**: Implement tickets sequentially (01 -> 19). Each ticket must be a testable vertical slice.
-- **Issue Tracker & Docs**: Local issues in `.scratch/` until GitHub remote is linked. See `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md`, and `docs/agents/domain.md`.
+- **Execution**: Implement tickets sequentially (01 -> 19, then 20+). Each ticket must be a testable vertical slice.
+- **Issue Tracker & Docs**: Tickets currently live as local Markdown in `.scratch/`. The GitHub remote is linked; `docs/agents/issue-tracker.md` documents the `gh` conventions to use once issues are published there. See also `docs/agents/triage-labels.md` and `docs/agents/domain.md`.

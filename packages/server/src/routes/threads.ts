@@ -14,6 +14,7 @@ export default async function threadsRoutes(
   const { db } = options;
 
   // Threads: GET by externalRef
+  // GET /api/v1/threads/by-ref/:ref
   const getThreadHandler = async (
     request: FastifyRequest,
     reply: FastifyReply
