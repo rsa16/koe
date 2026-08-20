@@ -1,9 +1,9 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   getSessionCookieAttributes,
   signSessionValue,
   verifySessionValue,
-} from "./session-cookie.js";
+} from "../src//session-cookie.js";
 
 describe("Session Cookie", () => {
   const secret = "test-cookie-secret-that-is-long-enough-32-chars";

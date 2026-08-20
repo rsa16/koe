@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { signOAuthState, verifyOAuthState } from "./oauth-state.js";
+import { describe, expect, it } from "vitest";
+import { signOAuthState, verifyOAuthState } from "../src/oauth-state.js";
 
 describe("OAuth State", () => {
   const secret = "test-oauth-secret-that-is-long-enough-32-chars";

@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { signAccessToken, verifyAccessToken } from "./tokens.js";
+import { describe, expect, it } from "vitest";
+import { signAccessToken, verifyAccessToken } from "../src/tokens.js";
 
 describe("Token Service", () => {
   const secret = "test-jwt-secret-that-is-long-enough-32-chars";
