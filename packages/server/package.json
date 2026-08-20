@@ -28,6 +28,7 @@
     "@koe/auth": "*",
     "@koe/core": "*",
     "@koe/db": "*",
+    "@koe/renderer": "*",
     "arctic": "^3.7.0",
     "dotenv": "^16.4.7",
     "fastify": "^5.2.1",

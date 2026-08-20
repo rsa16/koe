@@ -93,7 +93,7 @@ describe("Comments API Seam Integration Tests", () => {
     const body = response.json();
     expect(body.threadId).toBe(threadId);
     expect(body.bodyMd).toBe("**Hello** from a guest");
-    expect(body.bodyHtml).toBe("");
+    expect(body.bodyHtml).toBe("<p><strong>Hello</strong> from a guest</p>");
     expect(body.status).toBe("pending");
     expect(body.parentId).toBeNull();
     expect(body.depth).toBe(0);
@@ -102,6 +102,32 @@ describe("Comments API Seam Integration Tests", () => {
 
     const parseResult = CommentSchema.safeParse(body);
     expect(parseResult.success).toBe(true);
+  });
+
+  it("POST sanitizes raw HTML and renders markdown links in bodyHtml", async () => {
+    const threadId = await createThread();
+    const token = await anonToken();
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/v1/threads/${threadId}/comments`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        bodyMd:
+          'Hello <script>alert(1)</script> and [link](https://ok.dev) and <a href="https://ok.dev" onclick="evil()">raw</a>',
+      },
+    });
+
+    expect(response.statusCode).toBe(201);
+    const body = response.json();
+    expect(body.bodyMd).toContain("<script>alert(1)</script>");
+    expect(body.bodyHtml).not.toContain("<script");
+    expect(body.bodyHtml).not.toContain("onclick");
+    expect(body.bodyHtml).not.toContain("evil()");
+    expect(body.bodyHtml).toContain(
+      '<a href="https://ok.dev">link</a>'
+    );
+    expect(body.bodyHtml).not.toContain('href="https://ok.dev">raw</a>');
   });
 
   it("E2E: a comment can be posted and read back", async () => {

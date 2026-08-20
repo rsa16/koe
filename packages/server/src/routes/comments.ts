@@ -6,6 +6,7 @@ import {
   CreateCommentParamsSchema,
 } from "@koe/core";
 import { comments, Database, threads } from "@koe/db";
+import { renderMarkdown } from "@koe/renderer";
 import { eq, sql } from "drizzle-orm";
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
@@ -74,7 +75,7 @@ export default async function commentsRoutes(
           threadId,
           authorId: request.user!.id,
           bodyMd: bodyParsed.data.bodyMd,
-          bodyHtml: "",
+          bodyHtml: renderMarkdown(bodyParsed.data.bodyMd),
           status,
           depth: 0,
           path: "",

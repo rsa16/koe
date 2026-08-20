@@ -1,6 +1,7 @@
 import { Comment, createKoeClient, KoeClient } from "@koe/sdk";
 import { css, html, LitElement } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { unsafeHTML } from "lit/directives/unsafe-html.js";
 
 const ACCESS_TOKEN_KEY = "koe_access_token";
 
@@ -212,7 +213,7 @@ export class KoeComments extends LitElement {
                 ${this.comments.map(
                   (comment) => html`
                     <li class="comment">
-                      <p class="comment-body">${comment.bodyMd}</p>
+                      <div class="comment-body">${unsafeHTML(comment.bodyHtml)}</div>
                       <p class="comment-meta">
                         ${comment.status === "pending"
                           ? html`<span class="pending-badge">Pending</span>`
