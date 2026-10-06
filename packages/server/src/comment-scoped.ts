@@ -17,7 +17,8 @@ export async function commentExists(
 
 export async function findReaction(
   db: Database,
-  commentId: string,
+  targetType: "comment" | "thread",
+  targetId: string,
   userId: string,
   emoji: string
 ): Promise<typeof reactions.$inferSelect | null> {
@@ -26,8 +27,8 @@ export async function findReaction(
     .from(reactions)
     .where(
       and(
-        eq(reactions.targetType, "comment"),
-        eq(reactions.targetId, commentId),
+        eq(reactions.targetType, targetType),
+        eq(reactions.targetId, targetId),
         eq(reactions.userId, userId),
         eq(reactions.emoji, emoji)
       )

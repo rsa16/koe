@@ -3,7 +3,6 @@ import {
   createImgbbMediaProvider,
   createKoeClient,
   DEFAULT_EMOJI_ALLOWLIST,
-  KoeApiError,
   KoeClient,
   MediaProvider,
 } from "@koe/sdk";
@@ -11,9 +10,15 @@ import { html, LitElement, nothing, PropertyValues, TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { tailwindStyles } from "./generated/tailwind.styles.js";
+import {
+  ACCESS_TOKEN_KEY,
+  detectPreferredTheme,
+  ensureGuestSession,
+  readStoredTheme,
+  runWithAuthRetry,
+  THEME_KEY,
+} from "./session.js";
 
-const ACCESS_TOKEN_KEY = "koe_access_token";
-const THEME_KEY = "koe_theme";
 const COMPOSER_SCOPE = "composer";
 const MAX_VISIBLE_REACTIONS = 3;
 
@@ -211,15 +216,7 @@ export class KoeComments extends LitElement {
   };
 
   private initTheme() {
-    const stored = localStorage.getItem(THEME_KEY);
-    if (stored === "dark" || stored === "light") {
-      this.theme = stored;
-      return;
-    }
-    const prefersDark =
-      typeof window.matchMedia === "function" &&
-      window.matchMedia("(prefers-color-scheme: dark)").matches;
-    this.theme = prefersDark ? "dark" : "light";
+    this.theme = readStoredTheme(localStorage) ?? detectPreferredTheme();
   }
 
   setTheme(theme: "light" | "dark") {
@@ -256,33 +253,15 @@ export class KoeComments extends LitElement {
   }
 
   private async ensureGuest() {
-    const stored = localStorage.getItem(ACCESS_TOKEN_KEY);
-    if (stored) {
-      try {
-        await this.client!.auth.me(stored);
-        this.token = stored;
-        return;
-      } catch {
-        localStorage.removeItem(ACCESS_TOKEN_KEY);
-      }
-    }
-    const response = await this.client!.auth.anonymous();
-    this.token = response.accessToken;
-    localStorage.setItem(ACCESS_TOKEN_KEY, this.token);
+    this.token = await ensureGuestSession(this.client!, localStorage);
   }
 
   private async withAuthRetry<T>(operation: () => Promise<T>): Promise<T> {
-    try {
-      return await operation();
-    } catch (err) {
-      if (err instanceof KoeApiError && err.status === 401) {
-        localStorage.removeItem(ACCESS_TOKEN_KEY);
-        this.token = "";
-        await this.ensureGuest();
-        return await operation();
-      }
-      throw err;
-    }
+    return runWithAuthRetry(operation, async () => {
+      localStorage.removeItem(ACCESS_TOKEN_KEY);
+      this.token = "";
+      await this.ensureGuest();
+    });
   }
 
   private async reloadComments() {

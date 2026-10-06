@@ -16,7 +16,8 @@ import {
   Reaction,
   ReactionSchema,
   Thread,
-  ThreadSchema,
+  ThreadResponse,
+  ThreadResponseSchema,
   User,
   UserSchema,
   Vote,
@@ -39,6 +40,7 @@ export type {
   Reaction,
   ReactionTotals,
   Thread,
+  ThreadResponse,
   User,
   Vote,
   VoteValue,
@@ -95,7 +97,17 @@ export interface KoeClient {
     me(token?: string): Promise<User>;
   };
   threads: {
-    getByRef(ref: string, query?: GetThreadByRefQuery): Promise<Thread>;
+    getByRef(
+      ref: string,
+      query?: GetThreadByRefQuery,
+      token?: string
+    ): Promise<ThreadResponse>;
+    react(
+      threadId: string,
+      emoji: string,
+      token?: string
+    ): Promise<Reaction | null>;
+    unreact(threadId: string, emoji: string, token?: string): Promise<void>;
   };
   comments: {
     list(
@@ -226,12 +238,27 @@ export function createKoeClient(options: KoeClientOptions): KoeClient {
         request(UserSchema, "/api/v1/auth/me", { method: "GET", token }),
     },
     threads: {
-      getByRef: (ref, query) =>
+      getByRef: (ref, query, token) =>
         request(
-          ThreadSchema,
+          ThreadResponseSchema,
           `/api/v1/threads/by-ref/${encodeURIComponent(ref)}`,
-          { method: "GET", query }
+          { method: "GET", query, token }
         ),
+      react: async (threadId, emoji, token) => {
+        const result = await request(
+          ReactionSchema,
+          `/api/v1/threads/${threadId}/reactions`,
+          { method: "POST", body: { emoji }, token }
+        );
+        return result ?? null;
+      },
+      unreact: async (threadId, emoji, token) => {
+        await request(
+          ReactionSchema,
+          `/api/v1/threads/${threadId}/reactions/${encodeURIComponent(emoji)}`,
+          { method: "DELETE", token }
+        );
+      },
     },
     comments: {
       list: (threadId, query, token) =>

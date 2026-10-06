@@ -45,6 +45,7 @@ export async function createMemDb() {
       status thread_status NOT NULL DEFAULT 'open',
       pre_moderation BOOLEAN NOT NULL DEFAULT true,
       comment_count INTEGER NOT NULL DEFAULT 0,
+      reaction_totals JSONB NOT NULL DEFAULT '{}'::jsonb,
       metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

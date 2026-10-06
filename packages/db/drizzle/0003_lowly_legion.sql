@@ -1,0 +1,1 @@
+ALTER TABLE "threads" ADD COLUMN "reaction_totals" jsonb DEFAULT '{}'::jsonb NOT NULL;

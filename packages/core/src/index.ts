@@ -19,6 +19,12 @@ export type CommentStatus = z.infer<typeof CommentStatusSchema>;
 export const ReportStatusSchema = z.enum(["open", "resolved", "dismissed"]);
 export type ReportStatus = z.infer<typeof ReportStatusSchema>;
 
+export const ReactionTotalsSchema = z.record(
+  z.string(),
+  z.number().int().nonnegative()
+);
+export type ReactionTotals = z.infer<typeof ReactionTotalsSchema>;
+
 // User & Identity schemas
 export const UserSchema = z.object({
   id: z.string().uuid(),
@@ -63,11 +69,17 @@ export const ThreadSchema = z.object({
   status: ThreadStatusSchema,
   preModeration: z.boolean(),
   commentCount: z.number().int().nonnegative(),
+  reactionTotals: ReactionTotalsSchema.default({}),
   metadata: z.record(z.unknown()).default({}),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
 });
 export type Thread = z.infer<typeof ThreadSchema>;
+
+export const ThreadResponseSchema = ThreadSchema.extend({
+  userReactions: z.array(z.string()).default([]),
+});
+export type ThreadResponse = z.infer<typeof ThreadResponseSchema>;
 
 export const GetThreadByRefParamsSchema = z.object({
   ref: z.string().min(1),
@@ -136,12 +148,6 @@ export const ReactionSchema = z.object({
   updatedAt: z.coerce.date(),
 });
 export type Reaction = z.infer<typeof ReactionSchema>;
-
-export const ReactionTotalsSchema = z.record(
-  z.string(),
-  z.number().int().nonnegative()
-);
-export type ReactionTotals = z.infer<typeof ReactionTotalsSchema>;
 
 export const CreateReactionParamsSchema = IdParamSchema;
 export type CreateReactionParams = IdParam;

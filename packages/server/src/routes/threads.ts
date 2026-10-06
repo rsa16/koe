@@ -1,6 +1,10 @@
-import { GetThreadByRefParamsSchema, GetThreadByRefQuerySchema } from "@koe/core";
-import { Database, threads } from "@koe/db";
-import { eq } from "drizzle-orm";
+import {
+  GetThreadByRefParamsSchema,
+  GetThreadByRefQuerySchema,
+  ThreadResponseSchema,
+} from "@koe/core";
+import { Database, reactions, threads } from "@koe/db";
+import { and, eq } from "drizzle-orm";
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
 export interface ThreadsRoutesOptions {
@@ -13,7 +17,24 @@ export default async function threadsRoutes(
 ) {
   const { db } = options;
 
-  // Threads: GET by externalRef
+  async function userReactionsFor(
+    threadId: string,
+    userId: string
+  ): Promise<string[]> {
+    const rows: typeof reactions.$inferSelect[] = await db
+      .select()
+      .from(reactions)
+      .where(
+        and(
+          eq(reactions.targetType, "thread"),
+          eq(reactions.targetId, threadId),
+          eq(reactions.userId, userId)
+        )
+      );
+    return rows.map((row) => row.emoji);
+  }
+
+  // Threads: GET by externalRef (creates on first sight)
   // GET /api/v1/threads/by-ref/:ref
   const getThreadHandler = async (
     request: FastifyRequest,
@@ -45,7 +66,12 @@ export default async function threadsRoutes(
       .limit(1);
 
     if (existing.length > 0) {
-      return reply.status(200).send(existing[0]);
+      const userReactions = request.user
+        ? await userReactionsFor(existing[0].id, request.user.id)
+        : [];
+      return reply
+        .status(200)
+        .send(ThreadResponseSchema.parse({ ...existing[0], userReactions }));
     }
 
     // Create new thread
@@ -58,12 +84,19 @@ export default async function threadsRoutes(
         status: "open",
         preModeration: true,
         commentCount: 0,
+        reactionTotals: {},
         metadata: {},
       })
       .returning();
 
-    return reply.status(200).send(inserted[0]);
+    return reply
+      .status(200)
+      .send(ThreadResponseSchema.parse({ ...inserted[0], userReactions: [] }));
   };
 
-  app.get("/api/v1/threads/by-ref/:ref", getThreadHandler);
+  app.get(
+    "/api/v1/threads/by-ref/:ref",
+    { preHandler: app.authenticateOptional },
+    getThreadHandler
+  );
 }

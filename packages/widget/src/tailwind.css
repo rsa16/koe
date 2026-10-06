@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 @source "./koe-comments.ts";
+@source "./koe-article-reactions.ts";
 
 @custom-variant dark (&:where(.dark, .dark *));
 

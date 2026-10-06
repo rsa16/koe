@@ -42,6 +42,7 @@ export const threads = pgTable("threads", {
   status: threadStatusEnum("status").notNull().default("open"),
   preModeration: boolean("pre_moderation").notNull().default(true),
   commentCount: integer("comment_count").notNull().default(0),
+  reactionTotals: jsonb("reaction_totals").notNull().default({}),
   metadata: jsonb("metadata").notNull().default({}),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
