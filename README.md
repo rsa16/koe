@@ -368,6 +368,7 @@ yourself to target another host; no server-side storage is involved.
 | `reaction-emojis` | Comma-separated allowlist override for the picker. |
 | `gif-api-key` | Optional Giphy key; without it the GIF picker only accepts pasted image URLs. |
 | `media-api-key` | Optional imgbb API key; when set, the composer shows an image upload button. |
+| `token` | Optional bearer access token owned by the host. When set, the widget uses it for every request and never self-issues a guest session. |
 | `theme` | Reactive `light` \| `dark` property/attribute (default `light`). Reflects the host's design system. |
 | `show-theme-toggle` | Boolean. Shows the built-in theme toggle (hidden by default so the host owns the theme). |
 
@@ -406,10 +407,36 @@ as `<koe-comments>`, so the two can sit on the same page.
 | `base-url` | API base URL. Empty means same-origin. |
 | `thread-ref` | Opaque `externalRef` of the thread to react to. |
 | `reaction-emojis` | Comma-separated allowlist override for the buttons. |
+| `token` | Optional bearer access token owned by the host. When set, the widget never self-issues a guest session. |
 | `theme` | Reactive `light` \| `dark` property/attribute (default `light`). |
 
 Clicking a button toggles the caller's reaction and re-renders the count; the
 button is highlighted while the caller's reaction is active.
+
+### Host-owned identity
+
+Both widgets accept a reactive `token` property for hosts that own a single Koe
+identity across features (see [`docs/adr/0003`](docs/adr/0003-host-owned-auth-seam.md)).
+When a non-empty token is supplied the widget:
+
+- uses that token for every request and never reads or writes `koe_access_token`
+  in `localStorage`, and never calls `auth.anonymous()`;
+- validates it via `GET /api/v1/auth/me` before loading, so an expired or
+  invalid token is detected up front;
+- does **not** silently re-anonymise on expiry — instead it dispatches a
+  `koe-auth-expired` `CustomEvent` (with `detail.threadRef`) and waits for the
+  host to supply a fresh token.
+
+```js
+const comments = document.querySelector("koe-comments");
+comments.token = session.accessToken;
+comments.addEventListener("koe-auth-expired", async () => {
+  comments.token = await refreshSession();
+});
+```
+
+Updating `token` (on login, logout, or refresh) makes the widget refetch. With
+no token set, the standalone guest-session fallback above is unchanged.
 
 ### Theming
 

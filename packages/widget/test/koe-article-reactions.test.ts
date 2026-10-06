@@ -5,7 +5,10 @@ import { createMemDb } from "@koe/db";
 import { buildApp } from "@koe/server/app";
 import { FastifyInstance } from "fastify";
 import "../src/index.js";
-import { KoeArticleReactions } from "../src/index.js";
+import {
+  AUTH_EXPIRED_EVENT,
+  KoeArticleReactions,
+} from "../src/index.js";
 
 // jsdom provides its own `Uint8Array` realm while `TextEncoder` comes from
 // Node. jose checks `instanceof Uint8Array` and would fail across realms, so
@@ -212,6 +215,71 @@ describe("<koe-article-reactions> widget", () => {
     expect(buttons.length).toBe(2);
     expect(buttonFor(element, "🎉")).not.toBeNull();
     expect(buttonFor(element, "👍")).not.toBeNull();
+  });
+
+  it("uses a host-supplied token without creating or persisting a guest session", async () => {
+    const client = createKoeClient({ baseUrl });
+    const { accessToken } = await client.auth.anonymous();
+    localStorage.clear();
+
+    const element = mount("article-host-token", `token="${accessToken}"`);
+    await waitForButtons(element);
+
+    buttonFor(element, "👍").click();
+    await waitFor(
+      () => buttonFor(element, "👍").getAttribute("aria-pressed") === "true"
+    );
+
+    const thread = await client.threads.getByRef(
+      "article-host-token",
+      undefined,
+      accessToken
+    );
+    expect(thread.userReactions).toContain("👍");
+    expect(localStorage.getItem("koe_access_token")).toBeNull();
+  });
+
+  it("emits koe-auth-expired with the thread ref on a 401 instead of re-anonymising", async () => {
+    const events: CustomEvent[] = [];
+    const element = mount("article-host-expired", `token="expired-token"`);
+    element.addEventListener(AUTH_EXPIRED_EVENT, (e) =>
+      events.push(e as CustomEvent)
+    );
+
+    await waitFor(() => events.length > 0);
+    expect(events[0].detail.threadRef).toBe("article-host-expired");
+    expect(localStorage.getItem("koe_access_token")).toBeNull();
+  });
+
+  it("refetches with the new token when the host updates it", async () => {
+    const client = createKoeClient({ baseUrl });
+    const first = await client.auth.anonymous();
+    const second = await client.auth.anonymous();
+
+    const seenAuth: (string | null)[] = [];
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (input, init) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/by-ref/")) {
+        seenAuth.push(new Headers(init?.headers).get("authorization"));
+      }
+      return realFetch(input, init);
+    }) as typeof globalThis.fetch;
+
+    try {
+      const element = mount(
+        "article-host-refresh",
+        `token="${first.accessToken}"`
+      );
+      await waitForButtons(element);
+      seenAuth.length = 0;
+
+      element.token = second.accessToken;
+      await waitFor(() => seenAuth.includes(`Bearer ${second.accessToken}`));
+      expect(localStorage.getItem("koe_access_token")).toBeNull();
+    } finally {
+      globalThis.fetch = realFetch;
+    }
   });
 
   it("sources all styling from documented --koe-* tokens", () => {

@@ -5,7 +5,7 @@ import { createMemDb } from "@koe/db";
 import { buildApp } from "@koe/server/app";
 import { FastifyInstance } from "fastify";
 import "../src/index.js";
-import { KoeComments } from "../src/index.js";
+import { AUTH_EXPIRED_EVENT, KoeComments } from "../src/index.js";
 
 // jsdom provides its own `Uint8Array` realm while `TextEncoder` comes from
 // Node. jose checks `instanceof Uint8Array` and would fail across realms, so
@@ -94,8 +94,8 @@ describe("<koe-comments> widget", () => {
     document.body.innerHTML = "";
   });
 
-  function mount(ref: string): KoeComments {
-    document.body.innerHTML = `<koe-comments base-url="${baseUrl}" thread-ref="${ref}"></koe-comments>`;
+  function mount(ref: string, attributes = ""): KoeComments {
+    document.body.innerHTML = `<koe-comments base-url="${baseUrl}" thread-ref="${ref}" ${attributes}></koe-comments>`;
     const element = document.querySelector("koe-comments") as KoeComments;
     return element;
   }
@@ -238,6 +238,117 @@ describe("<koe-comments> widget", () => {
     });
 
     expect(localStorage.getItem("koe_access_token")).not.toBe("bogus-token");
+  });
+
+  it("uses a host-supplied token without creating or persisting a guest session", async () => {
+    const client = createKoeClient({ baseUrl });
+    const { accessToken } = await client.auth.anonymous();
+    const hostUser = await client.auth.me(accessToken);
+    localStorage.clear();
+
+    const element = mount("widget-host-token", `token="${accessToken}"`);
+    await waitFor(() => element.shadowRoot?.querySelector(".empty") !== null);
+
+    expect(localStorage.getItem("koe_access_token")).toBeNull();
+
+    await postComment(element, "Posted as the host identity");
+    await waitFor(() => {
+      const items = element.shadowRoot!.querySelectorAll(".comment");
+      return (
+        items.length === 1 &&
+        items[0].textContent?.includes("Posted as the host identity")
+      );
+    });
+
+    const thread = await client.threads.getByRef("widget-host-token");
+    const list = await client.comments.list(thread.id, undefined, accessToken);
+    const comment = list.comments.find(
+      (c) => c.bodyMd === "Posted as the host identity"
+    );
+    expect(comment?.authorId).toBe(hostUser.id);
+    expect(localStorage.getItem("koe_access_token")).toBeNull();
+  });
+
+  it("applies a token set immediately after the element is connected", async () => {
+    const client = createKoeClient({ baseUrl });
+    const { accessToken } = await client.auth.anonymous();
+    const hostUser = await client.auth.me(accessToken);
+    localStorage.clear();
+
+    const element = document.createElement("koe-comments") as KoeComments;
+    element.baseUrl = baseUrl;
+    element.threadRef = "widget-late-token";
+    document.body.appendChild(element);
+    element.token = accessToken;
+
+    await waitFor(() => element.shadowRoot?.querySelector(".empty") !== null);
+    expect(localStorage.getItem("koe_access_token")).toBeNull();
+
+    await postComment(element, "Late token comment");
+    await waitFor(
+      () => element.shadowRoot!.querySelectorAll(".comment").length === 1
+    );
+
+    const thread = await client.threads.getByRef("widget-late-token");
+    const list = await client.comments.list(thread.id, undefined, accessToken);
+    expect(
+      list.comments.find((c) => c.bodyMd === "Late token comment")?.authorId
+    ).toBe(hostUser.id);
+  });
+
+  it("emits koe-auth-expired with the thread ref on a 401 instead of re-anonymising", async () => {
+    const events: CustomEvent[] = [];
+    const element = mount("widget-host-expired", `token="expired-token"`);
+    element.addEventListener(AUTH_EXPIRED_EVENT, (e) =>
+      events.push(e as CustomEvent)
+    );
+
+    await waitFor(() => events.length > 0);
+    expect(events[0].detail.threadRef).toBe("widget-host-expired");
+    expect(localStorage.getItem("koe_access_token")).toBeNull();
+  });
+
+  it("refetches with the new token when the host updates it", async () => {
+    const client = createKoeClient({ baseUrl });
+    const first = await client.auth.anonymous();
+    const second = await client.auth.anonymous();
+
+    const seenAuth: (string | null)[] = [];
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (input, init) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/comments")) {
+        seenAuth.push(new Headers(init?.headers).get("authorization"));
+      }
+      return realFetch(input, init);
+    }) as typeof globalThis.fetch;
+
+    try {
+      const element = mount(
+        "widget-host-refresh",
+        `token="${first.accessToken}"`
+      );
+      await waitFor(() => element.shadowRoot?.querySelector(".empty") !== null);
+      seenAuth.length = 0;
+
+      element.token = second.accessToken;
+      await waitFor(() => seenAuth.includes(`Bearer ${second.accessToken}`));
+      expect(localStorage.getItem("koe_access_token")).toBeNull();
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
+  it("falls back to a guest session when the host clears the token", async () => {
+    const client = createKoeClient({ baseUrl });
+    const { accessToken } = await client.auth.anonymous();
+
+    const element = mount("widget-host-logout", `token="${accessToken}"`);
+    await waitFor(() => element.shadowRoot?.querySelector(".empty") !== null);
+    expect(localStorage.getItem("koe_access_token")).toBeNull();
+
+    element.token = "";
+    await waitFor(() => localStorage.getItem("koe_access_token") !== null);
   });
 
   it("opens an inline reply composer that is replaced by the reply on submit", async () => {

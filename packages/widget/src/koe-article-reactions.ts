@@ -3,13 +3,13 @@ import {
   DEFAULT_EMOJI_ALLOWLIST,
   KoeClient,
 } from "@koe/sdk";
-import { html, LitElement, nothing, TemplateResult } from "lit";
+import { html, LitElement, nothing, PropertyValues, TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { tailwindStyles } from "./generated/tailwind.styles.js";
 import {
-  ACCESS_TOKEN_KEY,
-  ensureGuestSession,
-  runWithAuthRetry,
+  AuthSession,
+  createAuthSession,
+  emitAuthExpired,
 } from "./session.js";
 
 @customElement("koe-article-reactions")
@@ -25,6 +25,9 @@ export class KoeArticleReactions extends LitElement {
   @property({ type: String, attribute: "reaction-emojis" })
   reactionEmojis = "";
 
+  @property({ type: String })
+  token = "";
+
   @property({ type: String, reflect: true })
   theme: "light" | "dark" = "light";
 
@@ -36,7 +39,7 @@ export class KoeArticleReactions extends LitElement {
   @state() private error = "";
 
   private client: KoeClient | null = null;
-  private token = "";
+  private auth: AuthSession | null = null;
 
   private get emojis(): string[] {
     return this.reactionEmojis
@@ -54,27 +57,35 @@ export class KoeArticleReactions extends LitElement {
         this.baseUrl ||
         (typeof window !== "undefined" ? window.location.origin : "");
       this.client = createKoeClient({ baseUrl: effectiveBaseUrl });
+      this.auth = createAuthSession({
+        client: this.client,
+        storage: localStorage,
+        hostToken: () => this.token,
+        onExpired: () => emitAuthExpired(this, this.threadRef),
+      });
+      if (this.hasUpdated) {
+        void this.load();
+      }
+    }
+  }
+
+  protected firstUpdated() {
+    if (this.client) {
       void this.load();
     }
   }
 
-  private async ensureGuest() {
-    this.token = await ensureGuestSession(this.client!, localStorage);
-  }
-
-  private async withAuthRetry<T>(operation: () => Promise<T>): Promise<T> {
-    return runWithAuthRetry(operation, async () => {
-      localStorage.removeItem(ACCESS_TOKEN_KEY);
-      this.token = "";
-      await this.ensureGuest();
-    });
+  protected willUpdate(changed: PropertyValues) {
+    if (this.hasUpdated && changed.has("token")) {
+      void this.load();
+    }
   }
 
   private async load() {
     this.loading = true;
     this.error = "";
     try {
-      await this.ensureGuest();
+      await this.auth!.resolve();
       await this.refresh();
     } catch (err) {
       this.error =
@@ -85,8 +96,12 @@ export class KoeArticleReactions extends LitElement {
   }
 
   private async refresh() {
-    const thread = await this.withAuthRetry(() =>
-      this.client!.threads.getByRef(this.threadRef, undefined, this.token)
+    const thread = await this.auth!.runWithRetry(() =>
+      this.client!.threads.getByRef(
+        this.threadRef,
+        undefined,
+        this.auth!.accessToken
+      )
     );
     this.threadId = thread.id;
     this.reactionTotals = thread.reactionTotals ?? {};
@@ -109,11 +124,19 @@ export class KoeArticleReactions extends LitElement {
     this.error = "";
     const active = this.isActive(emoji);
     try {
-      await this.withAuthRetry(async () => {
+      await this.auth!.runWithRetry(async () => {
         if (active) {
-          await this.client!.threads.unreact(this.threadId, emoji, this.token);
+          await this.client!.threads.unreact(
+            this.threadId,
+            emoji,
+            this.auth!.accessToken
+          );
         } else {
-          await this.client!.threads.react(this.threadId, emoji, this.token);
+          await this.client!.threads.react(
+            this.threadId,
+            emoji,
+            this.auth!.accessToken
+          );
         }
       });
       await this.refresh();

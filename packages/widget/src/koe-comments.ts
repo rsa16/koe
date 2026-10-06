@@ -11,9 +11,9 @@ import { customElement, property, state } from "lit/decorators.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { tailwindStyles } from "./generated/tailwind.styles.js";
 import {
-  ACCESS_TOKEN_KEY,
-  ensureGuestSession,
-  runWithAuthRetry,
+  AuthSession,
+  createAuthSession,
+  emitAuthExpired,
 } from "./session.js";
 
 const COMPOSER_SCOPE = "composer";
@@ -136,6 +136,9 @@ export class KoeComments extends LitElement {
   @property({ type: String, attribute: "media-api-key" })
   mediaApiKey = "";
 
+  @property({ type: String })
+  token = "";
+
   @property({ type: String, reflect: true })
   theme: "light" | "dark" = "light";
 
@@ -170,7 +173,7 @@ export class KoeComments extends LitElement {
   @state() private reportedComments: Set<string> = new Set();
 
   private client: KoeClient | null = null;
-  private token = "";
+  private auth: AuthSession | null = null;
   private mediaProvider: MediaProvider | null = null;
   private gifDebounce: number | undefined;
   private gifAbort: AbortController | null = null;
@@ -191,7 +194,15 @@ export class KoeComments extends LitElement {
         this.baseUrl ||
         (typeof window !== "undefined" ? window.location.origin : "");
       this.client = createKoeClient({ baseUrl: effectiveBaseUrl });
-      void this.loadThread();
+      this.auth = createAuthSession({
+        client: this.client,
+        storage: localStorage,
+        hostToken: () => this.token,
+        onExpired: () => emitAuthExpired(this, this.threadRef),
+      });
+      if (this.hasUpdated) {
+        void this.loadThread();
+      }
     }
   }
 
@@ -201,11 +212,20 @@ export class KoeComments extends LitElement {
     this.gifAbort?.abort();
   }
 
+  protected firstUpdated() {
+    if (this.client) {
+      void this.loadThread();
+    }
+  }
+
   protected willUpdate(changed: PropertyValues) {
     if (changed.has("mediaApiKey")) {
       this.mediaProvider = this.mediaApiKey
         ? createImgbbMediaProvider({ apiKey: this.mediaApiKey })
         : null;
+    }
+    if (this.hasUpdated && changed.has("token")) {
+      void this.loadThread();
     }
   }
 
@@ -222,8 +242,12 @@ export class KoeComments extends LitElement {
     this.loading = true;
     this.error = "";
     try {
-      await this.ensureGuest();
-      const thread = await this.client!.threads.getByRef(this.threadRef);
+      await this.auth!.resolve();
+      const thread = await this.client!.threads.getByRef(
+        this.threadRef,
+        undefined,
+        this.auth!.accessToken
+      );
       this.threadId = thread.id;
       await this.reloadComments();
     } catch (err) {
@@ -234,18 +258,6 @@ export class KoeComments extends LitElement {
     }
   }
 
-  private async ensureGuest() {
-    this.token = await ensureGuestSession(this.client!, localStorage);
-  }
-
-  private async withAuthRetry<T>(operation: () => Promise<T>): Promise<T> {
-    return runWithAuthRetry(operation, async () => {
-      localStorage.removeItem(ACCESS_TOKEN_KEY);
-      this.token = "";
-      await this.ensureGuest();
-    });
-  }
-
   private async reloadComments() {
     if (!this.threadId) {
       return;
@@ -253,7 +265,7 @@ export class KoeComments extends LitElement {
     const list = await this.client!.comments.list(
       this.threadId,
       undefined,
-      this.token
+      this.auth!.accessToken
     );
     this.comments = list.comments;
   }
@@ -545,14 +557,14 @@ export class KoeComments extends LitElement {
   }
 
   private async submitComment(body: string, parentId?: string) {
-    await this.withAuthRetry(() =>
+    await this.auth!.runWithRetry(() =>
       this.client!.comments.create(
         this.threadId,
         {
           bodyMd: body,
           ...(parentId ? { parentId } : {}),
         },
-        this.token
+        this.auth!.accessToken
       )
     );
     await this.reloadComments();
@@ -661,8 +673,8 @@ export class KoeComments extends LitElement {
     this.voting = true;
     this.error = "";
     try {
-      await this.withAuthRetry(() =>
-        this.client!.comments.vote(commentId, value, this.token)
+      await this.auth!.runWithRetry(() =>
+        this.client!.comments.vote(commentId, value, this.auth!.accessToken)
       );
       await this.reloadComments();
     } catch (err) {
@@ -680,8 +692,8 @@ export class KoeComments extends LitElement {
     this.reacting = true;
     this.error = "";
     try {
-      await this.withAuthRetry(() =>
-        this.client!.comments.react(commentId, emoji, this.token)
+      await this.auth!.runWithRetry(() =>
+        this.client!.comments.react(commentId, emoji, this.auth!.accessToken)
       );
       this.openReactionPicker = null;
       await this.reloadComments();
@@ -712,8 +724,8 @@ export class KoeComments extends LitElement {
     this.reporting = true;
     this.error = "";
     try {
-      await this.withAuthRetry(() =>
-        this.client!.comments.report(commentId, reason, this.token)
+      await this.auth!.runWithRetry(() =>
+        this.client!.comments.report(commentId, reason, this.auth!.accessToken)
       );
       const reported = new Set(this.reportedComments);
       reported.add(commentId);
