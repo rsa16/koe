@@ -49,6 +49,34 @@ export const UpdateUserBodySchema = z
   });
 export type UpdateUserBody = z.infer<typeof UpdateUserBodySchema>;
 
+export const AdminUpdateUserBodySchema = z
+  .object({
+    role: UserRoleSchema.optional(),
+    status: UserStatusSchema.optional(),
+  })
+  .refine((data) => Object.keys(data).length > 0, {
+    message: "At least one field must be provided to update",
+  });
+export type AdminUpdateUserBody = z.infer<typeof AdminUpdateUserBodySchema>;
+
+export const AdminUserListQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+  role: UserRoleSchema.optional(),
+  status: UserStatusSchema.optional(),
+  search: z.string().trim().min(1).optional(),
+});
+export type AdminUserListQuery = z.infer<typeof AdminUserListQuerySchema>;
+export type AdminUserListQueryInput = z.input<typeof AdminUserListQuerySchema>;
+
+export const AdminUserListResponseSchema = z.object({
+  users: z.array(UserSchema),
+  total: z.number().int().nonnegative(),
+  page: z.number().int().min(1),
+  pageSize: z.number().int().min(1),
+});
+export type AdminUserListResponse = z.infer<typeof AdminUserListResponseSchema>;
+
 export const IdentitySchema = z.object({
   id: z.string().uuid(),
   userId: z.string().uuid(),
@@ -364,6 +392,15 @@ export const AdminSessionUserSchema = z.object({
   user: UserSchema,
 });
 export type AdminSessionUser = z.infer<typeof AdminSessionUserSchema>;
+
+// Admin settings: read-only view of effective server configuration
+export const AdminSettingsSchema = z.object({
+  commentDepthCap: z.number().int().positive(),
+  reactionAllowlist: z.array(z.string()),
+  preModerationDefault: z.boolean(),
+  googleOAuthEnabled: z.boolean(),
+});
+export type AdminSettings = z.infer<typeof AdminSettingsSchema>;
 
 // Session schemas
 export const SessionSchema = z.object({

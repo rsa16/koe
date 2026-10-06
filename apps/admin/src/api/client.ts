@@ -1,12 +1,20 @@
 import {
   AdminSessionSchema,
   AdminSessionUserSchema,
+  AdminSettingsSchema,
+  AdminUpdateUserBodySchema,
+  AdminUserListResponseSchema,
   CommentModerationActionVerbSchema,
   CommentSchema,
   ModerationQueueResponseSchema,
+  UserSchema,
 } from "@koe/core";
 import type {
   AdminSession,
+  AdminSettings,
+  AdminUpdateUserBody,
+  AdminUserListQueryInput,
+  AdminUserListResponse,
   Comment,
   CommentModerationActionVerb,
   ModerationQueueItem,
@@ -26,6 +34,16 @@ export class AdminApiError extends Error {
     this.status = status;
     this.type = title;
   }
+}
+
+export function isUnauthorizedError(error: unknown): boolean {
+  return error instanceof AdminApiError && error.status === 401;
+}
+
+export function describeAdminError(error: unknown, fallback: string): string {
+  return error instanceof AdminApiError
+    ? `${error.type}: ${error.message}`
+    : fallback;
 }
 
 function readCookie(name: string): string | undefined {
@@ -112,4 +130,53 @@ export async function moderate(
     throw await toError(response);
   }
   return CommentSchema.parse(await response.json());
+}
+
+export type UserListParams = AdminUserListQueryInput;
+
+export async function fetchUsers(
+  params: UserListParams = {}
+): Promise<AdminUserListResponse> {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== "") {
+      query.set(key, String(value));
+    }
+  }
+  const suffix = query.toString();
+  const response = await request(
+    `/api/v1/admin/users${suffix ? `?${suffix}` : ""}`
+  );
+  if (!response.ok) {
+    throw await toError(response);
+  }
+  return AdminUserListResponseSchema.parse(await response.json());
+}
+
+export async function updateUser(
+  userId: string,
+  update: AdminUpdateUserBody
+): Promise<User> {
+  const parsed = AdminUpdateUserBodySchema.parse(update);
+  const csrfToken = readCookie(CSRF_COOKIE);
+  const response = await request(`/api/v1/admin/users/${userId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      ...(csrfToken ? { [CSRF_HEADER]: csrfToken } : {}),
+    },
+    body: JSON.stringify(parsed),
+  });
+  if (!response.ok) {
+    throw await toError(response);
+  }
+  return UserSchema.parse(await response.json());
+}
+
+export async function fetchSettings(): Promise<AdminSettings> {
+  const response = await request("/api/v1/admin/settings");
+  if (!response.ok) {
+    throw await toError(response);
+  }
+  return AdminSettingsSchema.parse(await response.json());
 }

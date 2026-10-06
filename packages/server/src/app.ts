@@ -23,6 +23,8 @@ import reportsRoutes from "./routes/reports.js";
 import moderationRoutes from "./routes/moderation.js";
 import usersRoutes from "./routes/users.js";
 import adminRoutes from "./routes/admin.js";
+import adminUsersRoutes from "./routes/admin-users.js";
+import adminSettingsRoutes from "./routes/admin-settings.js";
 
 export interface BuildAppOptions {
   db: Database;
@@ -106,6 +108,11 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   app.register(moderationRoutes, { db: options.db });
   app.register(usersRoutes, { db: options.db });
   app.register(adminRoutes, { db: options.db, jwtSecret, sessionSecret });
+  app.register(adminUsersRoutes, { db: options.db });
+  app.register(adminSettingsRoutes, {
+    reactionAllowlist,
+    googleOAuthEnabled: Boolean(googleOAuth),
+  });
 
   registerAdminSpa(app, options.adminDistPath);
 

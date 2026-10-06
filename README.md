@@ -13,8 +13,9 @@ web component — with a Material admin UI at `/admin` for moderation.
 
 > **Status.** Built as tracer-bullet tickets (`.scratch/headless-comments/issues/`).
 > Tickets 01–10 plus 12 (media), 13 (article reactions), 14 (reporting & audit),
-> 15 (ban & suspend), 16 (admin UI foundation), 20 (route refactor) and 21 (demo)
-> are implemented. Tickets 11 and 17–19 are still open — see
+> 15 (ban & suspend), 16 (admin UI foundation), 17 (admin users & settings),
+> 20 (route refactor) and 21 (demo)
+> are implemented. Tickets 11, 18 and 19 are still open — see
 > [README Maintenance](#readme-maintenance-unresolved-tickets).
 
 ## Features (available today)
@@ -44,7 +45,9 @@ web component — with a Material admin UI at `/admin` for moderation.
   API with a working Moderation Queue (pending and reported comments with
   Approve / Reject / Spam actions). It signs in by exchanging a moderator/admin
   bearer token for a `SameSite=Lax` session cookie, and state-changing calls are
-  protected by a CSRF double-submit token.
+  protected by a CSRF double-submit token. Admins additionally get a paginated
+  **Users** page (search/filter, role changes, suspend/ban/reactivate) and a
+  read-only **Settings** page surfacing the effective configuration.
 - Pluggable **Media** upload: the widget posts a selected image to imgbb with a
   client-side key and embeds the returned URL as `![image](url)`.
 - Drop-in `<koe-comments>` Lit web component (Tailwind styles, light/dark theme).
@@ -175,6 +178,11 @@ through.
 | `SESSION_SECRET` | no | Signing secret for admin session cookies. Defaults to `JWT_SECRET`. |
 | `ADMIN_DIST_PATH` | no | Filesystem path to the built admin SPA. Defaults to `apps/admin/dist`. If `index.html` is absent, `/admin` is not served. |
 
+All configuration is environment-only and read-only at runtime: the admin UI
+Settings page displays the effective values (`commentDepthCap`,
+`reactionAllowlist`, pre-moderation default, whether Google OAuth is configured)
+but cannot edit them. Change the environment and restart to reconfigure.
+
 ## API reference
 
 Base path `/api/v1`. All errors are RFC 9457 Problem Details. Authenticated
@@ -255,6 +263,10 @@ banned users' comments are hidden from listings as noted above.
 | --- | --- | --- | --- |
 | `PATCH` | `/api/v1/users/:id` | `admin` | Body `{ role }`. Changes a user's role. |
 
+The admin UI manages users through the session-cookie endpoints below rather
+than this bearer endpoint. `PATCH /api/v1/admin/users/:id` accepts a `role`
+and/or `status` and writes a `ban`/`suspend` audit record on status changes.
+
 ### Admin UI API
 
 Routes used by the `/admin` single-page app. They authenticate with the
@@ -270,6 +282,9 @@ role. State-changing requests must send the `koe_csrf` cookie value back in the
 | `DELETE` | `/api/v1/admin/session` | session cookie + CSRF | Clears the session and CSRF cookies. `204`. |
 | `GET` | `/api/v1/admin/moderation/queue` | session cookie | Same payload as `GET /api/v1/moderation/queue`. |
 | `POST` | `/api/v1/admin/moderation/actions` | session cookie + CSRF | Same body/semantics as `POST /api/v1/moderation/actions`. |
+| `GET` | `/api/v1/admin/users` | session cookie (`admin`) | Paginated users. Query `page` (default 1), `pageSize` (default 20, max 100), `role`, `status`, `search` (name/email substring). Returns `{ users, total, page, pageSize }`. |
+| `PATCH` | `/api/v1/admin/users/:id` | session cookie (`admin`) + CSRF | Body `{ role?, status? }` (at least one required). Changes a user's role and/or status. Status `banned`/`suspended` writes a `ban`/`suspend` audit record; `active` reactivates. Returns the updated `User`. |
+| `GET` | `/api/v1/admin/settings` | session cookie (`admin`) | Read-only effective configuration the SPA renders on the Settings page. |
 
 ## SDK
 
@@ -434,13 +449,6 @@ lands, update it as follows.
 - **Web component:** document that in-progress drafts are persisted to
   `localStorage`, keyed by thread and parent comment, and cleared on successful
   submit. Note any new storage keys alongside `koe_access_token`/`koe_theme`.
-
-### 17 — Admin UI: Users & Settings
-
-- **Admin UI section:** document the Users page (paginated table, role +
-  status controls) and the Settings page.
-- **Configuration:** document which settings are dynamic vs. env-only, and how
-  metadata config is edited.
 
 ### 18 — Rate Limiting & Duplicate Guard
 
