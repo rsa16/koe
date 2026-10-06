@@ -9,10 +9,12 @@ import {
   OAuthCallbackQuerySchema,
   OAuthCallbackResponseSchema,
   OAuthStartQuerySchema,
+  UpdateProfileBodySchema,
   User,
   UserSchema,
 } from "@koe/core";
 import { Database, identities, users } from "@koe/db";
+import { eq } from "drizzle-orm";
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import crypto from "node:crypto";
 import { renderOAuthSuccessPage, sendOAuthErrorPage } from "../oauth-render.js";
@@ -86,6 +88,53 @@ export default async function authRoutes(
   // GET /api/v1/auth/me
   const meHandler = async (request: FastifyRequest, reply: FastifyReply) => {
     return reply.status(200).send(UserSchema.parse(request.user));
+  };
+
+  // Auth: Update current user profile (name and/or avatar)
+  // PATCH /api/v1/auth/me
+  const updateMeHandler = async (
+    request: FastifyRequest,
+    reply: FastifyReply
+  ) => {
+    const bodyParsed = UpdateProfileBodySchema.safeParse(request.body);
+    if (!bodyParsed.success) {
+      return app.sendProblem(
+        reply,
+        400,
+        "Bad Request",
+        "Invalid profile update body",
+        request.url,
+        bodyParsed.error.issues
+      );
+    }
+
+    const user = request.user;
+    if (!user) {
+      return app.sendProblem(
+        reply,
+        401,
+        "Unauthorized",
+        "Authentication required",
+        request.url
+      );
+    }
+
+    const { name, avatarUrl } = bodyParsed.data;
+    const update: {
+      name?: string | null;
+      avatarUrl?: string | null;
+      updatedAt: Date;
+    } = { updatedAt: new Date() };
+    if (name !== undefined) update.name = name;
+    if (avatarUrl !== undefined) update.avatarUrl = avatarUrl;
+
+    const [updated] = await db
+      .update(users)
+      .set(update)
+      .where(eq(users.id, user.id))
+      .returning();
+
+    return reply.status(200).send(UserSchema.parse(updated));
   };
 
   // Auth: Google OAuth start
@@ -216,6 +265,11 @@ export default async function authRoutes(
 
   app.post("/api/v1/auth/anonymous", anonymousHandler);
   app.get("/api/v1/auth/me", { preHandler: app.authenticate }, meHandler);
+  app.patch(
+    "/api/v1/auth/me",
+    { preHandler: app.authenticate },
+    updateMeHandler
+  );
   app.get("/api/v1/auth/oauth/google", oauthGoogleHandler);
   app.get("/api/v1/auth/oauth/google/callback", oauthGoogleCallbackHandler);
 }

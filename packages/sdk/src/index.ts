@@ -23,6 +23,7 @@ import {
   Thread,
   ThreadResponse,
   ThreadResponseSchema,
+  UpdateProfileBody,
   User,
   UserModerationActionVerb,
   UserSchema,
@@ -52,6 +53,7 @@ export type {
   Report,
   Thread,
   ThreadResponse,
+  UpdateProfileBody,
   User,
   Vote,
   VoteValue,
@@ -120,6 +122,7 @@ export interface KoeClient {
   auth: {
     anonymous(): Promise<AnonymousAuthResponse>;
     me(token?: string): Promise<User>;
+    updateMe(body: UpdateProfileBody, token?: string): Promise<User>;
   };
   threads: {
     getByRef(
@@ -282,6 +285,8 @@ export function createKoeClient(options: KoeClientOptions): KoeClient {
         }),
       me: (token) =>
         request(UserSchema, "/auth/me", { method: "GET", token }),
+      updateMe: (body, token) =>
+        request(UserSchema, "/auth/me", { method: "PATCH", body, token }),
     },
     threads: {
       getByRef: (ref, query, token) =>

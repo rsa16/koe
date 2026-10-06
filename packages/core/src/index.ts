@@ -49,6 +49,16 @@ export const UpdateUserBodySchema = z
   });
 export type UpdateUserBody = z.infer<typeof UpdateUserBodySchema>;
 
+export const UpdateProfileBodySchema = z
+  .object({
+    name: z.string().trim().min(1).max(80).nullable().optional(),
+    avatarUrl: z.string().url().max(2048).nullable().optional(),
+  })
+  .refine((data) => data.name !== undefined || data.avatarUrl !== undefined, {
+    message: "At least one field must be provided to update",
+  });
+export type UpdateProfileBody = z.infer<typeof UpdateProfileBodySchema>;
+
 export const AdminUpdateUserBodySchema = z
   .object({
     role: UserRoleSchema.optional(),

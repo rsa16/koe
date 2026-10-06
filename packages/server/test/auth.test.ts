@@ -99,4 +99,130 @@ describe("Auth API Seam Integration Tests", () => {
     expect(meRes.statusCode).toBe(401);
     expect(meRes.headers["content-type"]).toContain("application/problem+json");
   });
+
+  describe("PATCH /api/v1/auth/me", () => {
+    async function anonUser(): Promise<{ id: string; token: string }> {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/v1/auth/anonymous",
+      });
+      const body = response.json();
+      return { id: body.user.id, token: body.accessToken };
+    }
+
+    it("requires authentication", async () => {
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/v1/auth/me",
+        payload: { name: "Anonymous" },
+      });
+
+      expect(response.statusCode).toBe(401);
+      expect(response.headers["content-type"]).toContain(
+        "application/problem+json"
+      );
+    });
+
+    it("updates the display name and avatar and returns the updated user", async () => {
+      const { id, token } = await anonUser();
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/v1/auth/me",
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          name: "  Renamed Reader  ",
+          avatarUrl: "https://example.com/avatar.png",
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.id).toBe(id);
+      expect(body.name).toBe("Renamed Reader");
+      expect(body.avatarUrl).toBe("https://example.com/avatar.png");
+
+      const meRes = await app.inject({
+        method: "GET",
+        url: "/api/v1/auth/me",
+        headers: { authorization: `Bearer ${token}` },
+      });
+      expect(meRes.json().name).toBe("Renamed Reader");
+      expect(meRes.json().avatarUrl).toBe("https://example.com/avatar.png");
+    });
+
+    it("updates only the fields provided", async () => {
+      const { token } = await anonUser();
+      const headers = { authorization: `Bearer ${token}` };
+
+      await app.inject({
+        method: "PATCH",
+        url: "/api/v1/auth/me",
+        headers,
+        payload: { name: "First", avatarUrl: "https://example.com/a.png" },
+      });
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/v1/auth/me",
+        headers,
+        payload: { name: "Second" },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().name).toBe("Second");
+      expect(response.json().avatarUrl).toBe("https://example.com/a.png");
+    });
+
+    it("clears the avatar with an explicit null", async () => {
+      const { token } = await anonUser();
+      const headers = { authorization: `Bearer ${token}` };
+
+      await app.inject({
+        method: "PATCH",
+        url: "/api/v1/auth/me",
+        headers,
+        payload: { avatarUrl: "https://example.com/a.png" },
+      });
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/v1/auth/me",
+        headers,
+        payload: { avatarUrl: null },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().avatarUrl).toBeNull();
+    });
+
+    it("rejects an empty update body with a 400 Problem Details", async () => {
+      const { token } = await anonUser();
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/v1/auth/me",
+        headers: { authorization: `Bearer ${token}` },
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.headers["content-type"]).toContain(
+        "application/problem+json"
+      );
+    });
+
+    it("rejects a non-url avatar", async () => {
+      const { token } = await anonUser();
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/v1/auth/me",
+        headers: { authorization: `Bearer ${token}` },
+        payload: { avatarUrl: "not-a-url" },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+  });
 });
