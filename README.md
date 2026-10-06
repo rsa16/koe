@@ -13,8 +13,9 @@ web component — with a Material admin UI for moderation down the road.
 
 > **Status.** Built as tracer-bullet tickets (`.scratch/headless-comments/issues/`).
 > Tickets 01–10 plus 12 (media), 13 (article reactions), 14 (reporting & audit),
-> 20 (route refactor) and 21 (demo) are implemented. Tickets 11 and 15–19 are
-> still open — see [README Maintenance](#readme-maintenance-unresolved-tickets).
+> 15 (ban & suspend), 20 (route refactor) and 21 (demo) are implemented.
+> Tickets 11 and 16–19 are still open — see
+> [README Maintenance](#readme-maintenance-unresolved-tickets).
 
 ## Features (available today)
 
@@ -31,8 +32,13 @@ web component — with a Material admin UI for moderation down the road.
 - Moderation queue + approve/reject/delete actions, gated to `moderator`/`admin`.
 - **Reports**: visitors flag a `Comment` with a reason; open reports surface
   published comments in the moderation queue until they are resolved.
-- Moderation **audit log**: every approve/reject/delete writes an immutable
-  `ModerationAction` record, readable by admins.
+- Moderation **audit log**: every approve/reject/delete/ban/suspend writes an
+  immutable `ModerationAction` record, readable by admins.
+- **User bans & suspensions**: `moderator`/`admin` can suspend a user; only
+  `admin` can ban. Suspended and banned accounts are blocked from creating
+  comments, voting, and reacting (reads still work).
+- **Banned-user content hiding**: comments authored by `banned` users are
+  filtered out of comment listings while their rows are retained.
 - Admin-only role changes via `PATCH /api/v1/users/:id`.
 - Pluggable **Media** upload: the widget posts a selected image to imgbb with a
   client-side key and embeds the returned URL as `![image](url)`.
@@ -174,7 +180,7 @@ endpoints expect `Authorization: Bearer <accessToken>`.
 | Method | Path | Auth | Description |
 | --- | --- | --- | --- |
 | `POST` | `/api/v1/threads/:id/comments` | bearer | Create a `Comment`. Body `{ bodyMd, parentId? }`. `201`. Status is `pending` unless the thread has post-moderation. |
-| `GET` | `/api/v1/threads/:id/comments` | optional bearer | Paginated top-level comments with full nested subtrees inline. Query `page` (default 1), `pageSize` (default 20, max 100). Returns `{ comments, total, page, pageSize }`. With a bearer token, includes the caller's own `pending` comments plus their `userVote`/`userReactions` state. |
+| `GET` | `/api/v1/threads/:id/comments` | optional bearer | Paginated top-level comments with full nested subtrees inline. Query `page` (default 1), `pageSize` (default 20, max 100). Returns `{ comments, total, page, pageSize }`. With a bearer token, includes the caller's own `pending` comments plus their `userVote`/`userReactions` state. Comments authored by `banned` users are omitted (rows are retained, not deleted). |
 
 ### Votes
 
@@ -202,7 +208,13 @@ endpoints expect `Authorization: Bearer <accessToken>`.
 | --- | --- | --- | --- |
 | `GET` | `/api/v1/moderation/queue` | `moderator`/`admin` | Pending comments, plus published comments that carry an open `Report`, with thread context and author name. |
 | `GET` | `/api/v1/moderation/actions` | `admin` | `ModerationAction` audit log, newest first, with actor name. |
-| `POST` | `/api/v1/moderation/actions` | `moderator`/`admin` | Body `{ commentId, action: "approve" \| "reject" \| "delete" }`. Approve → `published` (dismisses open reports); reject/delete → `deleted` (resolves open reports). Writes an audit record. `409` if approving/rejecting a comment that is neither pending nor carrying an open report. |
+| `POST` | `/api/v1/moderation/actions` | `moderator`/`admin` | **Comment actions.** Body `{ commentId, action: "approve" \| "reject" \| "delete" }`. Approve → `published` (dismisses open reports); reject/delete → `deleted` (resolves open reports). Writes an audit record. `409` if approving/rejecting a comment that is neither pending nor carrying an open report. |
+| `POST` | `/api/v1/moderation/actions` | `moderator`/`admin` (`admin` only to ban) | **User actions.** Body `{ userId, action: "suspend" \| "ban" }`. Suspend → `suspended`; ban → `banned` and is restricted to `admin` (`403` for a `moderator`). Returns the updated `User` and writes an audit record with `targetType: "user"`. |
+
+Suspended and banned accounts are blocked from interacting: creating comments,
+voting, and reacting all return `403 application/problem+json`. Reading threads
+and comments stays available. Suspended users' existing comments remain visible;
+banned users' comments are hidden from listings as noted above.
 
 ### Users
 
@@ -236,8 +248,12 @@ await client.threads.unreact(thread.id, "🎉", accessToken);
 const queue = await client.moderation.queue(adminToken);
 await client.moderation.act(queue.comments[0].id, "approve", adminToken);
 
+// Moderator/admin:
+await client.moderation.suspend(someUserId, moderatorToken);
+
 // Admin only:
 const audit = await client.moderation.actions(adminToken);
+await client.moderation.ban(someUserId, adminToken);
 ```
 
 ### Media
@@ -369,16 +385,6 @@ lands, update it as follows.
 - **Web component:** document that in-progress drafts are persisted to
   `localStorage`, keyed by thread and parent comment, and cleared on successful
   submit. Note any new storage keys alongside `koe_access_token`/`koe_theme`.
-
-### 15 — Moderation: Ban & Suspend Users
-
-- **API reference:** note that `PATCH /api/v1/users/:id` now accepts `status`
-  changes (`suspend`/`ban`), and that suspended/banned users are blocked from
-  create/vote/react.
-- **API reference:** note that banned users' comments are filtered from comment
-  listings (rows retained).
-- **Moderation:** document `ban`/`suspend` targets on the actions endpoint.
-- **Features:** add bullets for suspend/ban behavior and content hiding.
 
 ### 16 — Admin UI Foundation
 
