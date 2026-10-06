@@ -4079,6 +4079,25 @@ var UpdateUserBodySchema = external_exports.object({
 }).refine((data) => Object.keys(data).length > 0, {
   message: "At least one field must be provided to update"
 });
+var AdminUpdateUserBodySchema = external_exports.object({
+  role: UserRoleSchema.optional(),
+  status: UserStatusSchema.optional()
+}).refine((data) => Object.keys(data).length > 0, {
+  message: "At least one field must be provided to update"
+});
+var AdminUserListQuerySchema = external_exports.object({
+  page: external_exports.coerce.number().int().min(1).default(1),
+  pageSize: external_exports.coerce.number().int().min(1).max(100).default(20),
+  role: UserRoleSchema.optional(),
+  status: UserStatusSchema.optional(),
+  search: external_exports.string().trim().min(1).optional()
+});
+var AdminUserListResponseSchema = external_exports.object({
+  users: external_exports.array(UserSchema),
+  total: external_exports.number().int().nonnegative(),
+  page: external_exports.number().int().min(1),
+  pageSize: external_exports.number().int().min(1)
+});
 var IdentitySchema = external_exports.object({
   id: external_exports.string().uuid(),
   userId: external_exports.string().uuid(),
@@ -4196,12 +4215,27 @@ var ReportSchema = external_exports.object({
 var CreateReportBodySchema = external_exports.object({
   reason: external_exports.string().trim().min(1).max(1e3)
 });
-var ModerationActionVerbSchema = external_exports.enum(["approve", "reject", "delete"]);
 var ModerationTargetTypeSchema = external_exports.enum(["comment", "user", "thread"]);
-var CreateModerationActionBodySchema = external_exports.object({
+var COMMENT_MODERATION_ACTIONS = ["approve", "reject", "delete", "spam"];
+var USER_MODERATION_ACTIONS = ["ban", "suspend"];
+var CommentModerationActionVerbSchema = external_exports.enum(COMMENT_MODERATION_ACTIONS);
+var UserModerationActionVerbSchema = external_exports.enum(USER_MODERATION_ACTIONS);
+var ModerationActionVerbSchema = external_exports.enum([
+  ...COMMENT_MODERATION_ACTIONS,
+  ...USER_MODERATION_ACTIONS
+]);
+var CommentModerationActionSchema = external_exports.object({
   commentId: external_exports.string().uuid(),
-  action: ModerationActionVerbSchema
+  action: CommentModerationActionVerbSchema
 });
+var UserModerationActionSchema = external_exports.object({
+  userId: external_exports.string().uuid(),
+  action: UserModerationActionVerbSchema
+});
+var CreateModerationActionBodySchema = external_exports.union([
+  CommentModerationActionSchema,
+  UserModerationActionSchema
+]);
 var ThreadContextSchema = ThreadSchema.pick({
   id: true,
   externalRef: true,
@@ -4240,6 +4274,19 @@ var OAuthStartQuerySchema = external_exports.object({
 var OAuthCallbackQuerySchema = external_exports.object({
   code: external_exports.string().min(1),
   state: external_exports.string().min(1)
+});
+var AdminSessionSchema = external_exports.object({
+  user: UserSchema,
+  csrfToken: external_exports.string().min(1)
+});
+var AdminSessionUserSchema = external_exports.object({
+  user: UserSchema
+});
+var AdminSettingsSchema = external_exports.object({
+  commentDepthCap: external_exports.number().int().positive(),
+  reactionAllowlist: external_exports.array(external_exports.string()),
+  preModerationDefault: external_exports.boolean(),
+  googleOAuthEnabled: external_exports.boolean()
 });
 var SessionSchema = external_exports.object({
   id: external_exports.string().uuid(),
@@ -4374,6 +4421,13 @@ function createKoeClient(options) {
     const data = await response.json();
     return schema.parse(data);
   }
+  function moderateUser(userId, action, token) {
+    return request(UserSchema, "/api/v1/moderation/actions", {
+      method: "POST",
+      body: { userId, action },
+      token
+    });
+  }
   return {
     auth: {
       anonymous: () => request(AnonymousAuthResponseSchema, "/api/v1/auth/anonymous", {
@@ -4431,7 +4485,9 @@ function createKoeClient(options) {
         method: "POST",
         body: { commentId, action },
         token
-      })
+      }),
+      ban: (userId, token) => moderateUser(userId, "ban", token),
+      suspend: (userId, token) => moderateUser(userId, "suspend", token)
     }
   };
 }
@@ -5069,12 +5125,11 @@ var o6 = e5(e6);
 // ../../packages/widget/src/generated/tailwind.styles.ts
 var tailwindStyles = i`
 /*! tailwindcss v4.3.3 | MIT License | https://tailwindcss.com */
-@layer properties{@supports (((-webkit-hyphens:none)) and (not (margin-trim:inline))) or ((-moz-orient:inline) and (not (color:rgb(from red r g b)))){*,:before,:after,::backdrop{--tw-space-y-reverse:0;--tw-border-style:solid;--tw-gradient-position:initial;--tw-gradient-from:#0000;--tw-gradient-via:#0000;--tw-gradient-to:#0000;--tw-gradient-stops:initial;--tw-gradient-via-stops:initial;--tw-gradient-from-position:0%;--tw-gradient-via-position:50%;--tw-gradient-to-position:100%;--tw-leading:initial;--tw-font-weight:initial;--tw-tracking:initial;--tw-ordinal:initial;--tw-slashed-zero:initial;--tw-numeric-figure:initial;--tw-numeric-spacing:initial;--tw-numeric-fraction:initial;--tw-shadow:0 0 #0000;--tw-shadow-color:initial;--tw-shadow-alpha:100%;--tw-inset-shadow:0 0 #0000;--tw-inset-shadow-color:initial;--tw-inset-shadow-alpha:100%;--tw-ring-color:initial;--tw-ring-shadow:0 0 #0000;--tw-inset-ring-color:initial;--tw-inset-ring-shadow:0 0 #0000;--tw-ring-inset:initial;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-offset-shadow:0 0 #0000;--tw-backdrop-blur:initial;--tw-backdrop-brightness:initial;--tw-backdrop-contrast:initial;--tw-backdrop-grayscale:initial;--tw-backdrop-hue-rotate:initial;--tw-backdrop-invert:initial;--tw-backdrop-opacity:initial;--tw-backdrop-saturate:initial;--tw-backdrop-sepia:initial;--tw-duration:initial}}}@layer theme{:root,:host{--font-sans:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "Noto Sans", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";--font-serif:ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;--font-mono:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;--color-red-50:oklch(97.1% .013 17.38);--color-red-200:oklch(88.5% .062 18.334);--color-red-400:oklch(70.4% .191 22.216);--color-red-500:oklch(63.7% .237 25.331);--color-red-600:oklch(57.7% .245 27.325);--color-red-900:oklch(39.6% .141 25.723);--color-red-950:oklch(25.8% .092 26.042);--color-blue-400:oklch(70.7% .165 254.624);--color-blue-500:oklch(62.3% .214 259.815);--color-blue-600:oklch(54.6% .245 262.881);--color-fuchsia-500:oklch(66.7% .295 322.15);--color-pink-500:oklch(65.6% .241 354.308);--color-slate-50:oklch(98.4% .003 247.858);--color-slate-100:oklch(96.8% .007 247.896);--color-slate-200:oklch(92.9% .013 255.508);--color-slate-300:oklch(86.9% .022 252.894);--color-slate-400:oklch(70.4% .04 256.788);--color-slate-500:oklch(55.4% .046 257.417);--color-slate-600:oklch(44.6% .043 257.281);--color-slate-700:oklch(37.2% .044 257.287);--color-slate-800:oklch(27.9% .041 260.031);--color-slate-900:oklch(20.8% .042 265.755);--color-white:#fff;--spacing:.25rem;--text-xs:.75rem;--text-xs--line-height:calc(1 / .75);--text-sm:.875rem;--text-sm--line-height:calc(1.25 / .875);--text-base:1rem;--text-base--line-height:calc(1.5 / 1);--text-lg:1.125rem;--text-lg--line-height:calc(1.75 / 1.125);--text-xl:1.25rem;--text-xl--line-height:calc(1.75 / 1.25);--text-3xl:1.875rem;--text-3xl--line-height:calc(2.25 / 1.875);--font-weight-medium:500;--font-weight-semibold:600;--font-weight-bold:700;--font-weight-extrabold:800;--tracking-tight:-.025em;--tracking-wide:.025em;--leading-relaxed:1.625;--radius-lg:.5rem;--radius-xl:.75rem;--radius-2xl:1rem;--animate-pulse:pulse 2s cubic-bezier(.4, 0, .6, 1) infinite;--blur-sm:8px;--default-transition-duration:.15s;--default-transition-timing-function:cubic-bezier(.4, 0, .2, 1);--default-font-family:var(--font-sans);--default-mono-font-family:var(--font-mono)}}@layer base{*,:after,:before,::backdrop{box-sizing:border-box;border:0 solid;margin:0;padding:0}::file-selector-button{box-sizing:border-box;border:0 solid;margin:0;padding:0}html,:host{-webkit-text-size-adjust:100%;tab-size:4;line-height:1.5;font-family:var(--default-font-family,-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "Noto Sans", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji");font-feature-settings:var(--default-font-feature-settings,normal);font-variation-settings:var(--default-font-variation-settings,normal);-webkit-tap-highlight-color:transparent}hr{height:0;color:inherit;border-top-width:1px}abbr:where([title]){-webkit-text-decoration:underline dotted;text-decoration:underline dotted}h1,h2,h3,h4,h5,h6{font-size:inherit;font-weight:inherit}a{color:inherit;-webkit-text-decoration:inherit;-webkit-text-decoration:inherit;-webkit-text-decoration:inherit;text-decoration:inherit}b,strong{font-weight:bolder}code,kbd,samp,pre{font-family:var(--default-mono-font-family,ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace);font-feature-settings:var(--default-mono-font-feature-settings,normal);font-variation-settings:var(--default-mono-font-variation-settings,normal);font-size:1em}small{font-size:80%}sub,sup{vertical-align:baseline;font-size:75%;line-height:0;position:relative}sub{bottom:-.25em}sup{top:-.5em}table{text-indent:0;border-color:inherit;border-collapse:collapse}:-moz-focusring:where(:not(iframe)){outline:auto}progress{vertical-align:baseline}summary{display:list-item}ol,ul,menu{list-style:none}img,svg,video,canvas,audio,iframe,embed,object{vertical-align:middle;display:block}img,video{max-width:100%;height:auto}button,input,select,optgroup,textarea{font:inherit;font-feature-settings:inherit;font-variation-settings:inherit;letter-spacing:inherit;color:inherit;opacity:1;background-color:#0000;border-radius:0}::file-selector-button{font:inherit;font-feature-settings:inherit;font-variation-settings:inherit;letter-spacing:inherit;color:inherit;opacity:1;background-color:#0000;border-radius:0}:where(select:is([multiple],[size])) optgroup{font-weight:bolder}:where(select:is([multiple],[size])) optgroup option{padding-inline-start:20px}::file-selector-button{margin-inline-end:4px}::placeholder{opacity:1}@supports (not ((-webkit-appearance:-apple-pay-button))) or (contain-intrinsic-size:1px){::placeholder{color:currentColor}@supports (color:color-mix(in lab, red, red)){::placeholder{color:color-mix(in oklab, currentcolor 50%, transparent)}}}textarea{resize:vertical}::-webkit-search-decoration{-webkit-appearance:none}::-webkit-date-and-time-value{min-height:1lh;text-align:inherit}::-webkit-datetime-edit{display:inline-flex}::-webkit-datetime-edit-fields-wrapper{padding:0}::-webkit-datetime-edit{padding-block:0}::-webkit-datetime-edit-year-field{padding-block:0}::-webkit-datetime-edit-month-field{padding-block:0}::-webkit-datetime-edit-day-field{padding-block:0}::-webkit-datetime-edit-hour-field{padding-block:0}::-webkit-datetime-edit-minute-field{padding-block:0}::-webkit-datetime-edit-second-field{padding-block:0}::-webkit-datetime-edit-millisecond-field{padding-block:0}::-webkit-datetime-edit-meridiem-field{padding-block:0}::-webkit-calendar-picker-indicator{line-height:1}:-moz-ui-invalid{box-shadow:none}button,input:where([type=button],[type=reset],[type=submit]){appearance:button}::file-selector-button{appearance:button}::-webkit-inner-spin-button{height:auto}::-webkit-outer-spin-button{height:auto}[hidden]:where(:not([hidden=until-found])){display:none!important}}@layer components{:host{font-family:var(--koe-font,system-ui, sans-serif);color:var(--koe-text,#0f172a);display:block}.koe-comments{--koe-divider:#e5e7eb;--koe-thread-line-0:#e5e7eb;--koe-thread-line-1:#bae6fd;--koe-thread-line-2:#ddd6fe;--koe-thread-line-3:#a7f3d0}.koe-comments.dark{--koe-text:#e2e8f0;--koe-divider:#1e293b;--koe-thread-line-0:#334155;--koe-thread-line-1:#075985;--koe-thread-line-2:#5b21b6;--koe-thread-line-3:#065f46;color:var(--koe-text)}.comment-list{margin:0;padding:0;list-style:none}.comment-list--root>.comment+.comment{border-top:1px solid var(--koe-divider);margin-top:1.5rem;padding-top:1.5rem}.thread-line{border-left-style:solid;border-left-width:2px}.comment-body{white-space:pre-wrap;word-break:break-word}.comment-body>:first-child{margin-top:0}.comment-body>:last-child{margin-bottom:0}.comment-body img{border-radius:.75rem;max-width:min(320px,100%);height:auto;margin:.25rem 0;display:inline-block}.pending-badge{color:#92400e;white-space:nowrap;background-color:#fef3c7;border-radius:999px;align-items:center;padding:1px 8px;font-size:.7rem;font-weight:500;display:inline-flex}.dark .pending-badge{color:#fcd34d;background-color:#fbbf241f}.toolbar-button{color:#64748b;border-radius:.5rem;justify-content:center;align-items:center;width:2rem;height:2rem;transition:background-color .15s,color .15s;display:inline-flex}.toolbar-button:hover{color:#0f172a;background-color:#f1f5f9}.dark .toolbar-button{color:#94a3b8}.dark .toolbar-button:hover{color:#f1f5f9;background-color:#1e293b}}@layer utilities{.absolute{position:absolute}.relative{position:relative}.static{position:static}.top-full{top:100%}.right-2{right:calc(var(--spacing) * 2)}.z-20{z-index:20}.col-span-3{grid-column:span 3/span 3}.mx-1{margin-inline:var(--spacing)}.prose{color:var(--tw-prose-body);max-width:65ch}.prose :where(p):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:1.25em;margin-bottom:1.25em}.prose :where([class~=lead]):not(:where([class~=not-prose],[class~=not-prose] *)){color:var(--tw-prose-lead);margin-top:1.2em;margin-bottom:1.2em;font-size:1.25em;line-height:1.6}.prose :where(a):not(:where([class~=not-prose],[class~=not-prose] *)){color:var(--tw-prose-links);font-weight:500;text-decoration:underline}.prose :where(strong):not(:where([class~=not-prose],[class~=not-prose] *)){color:var(--tw-prose-bold);font-weight:600}.prose :where(a strong):not(:where([class~=not-prose],[class~=not-prose] *)),.prose :where(blockquote strong):not(:where([class~=not-prose],[class~=not-prose] *)),.prose :where(thead th strong):not(:where([class~=not-prose],[class~=not-prose] *)){color:inherit}.prose :where(ol):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:1.25em;margin-bottom:1.25em;padding-inline-start:1.625em;list-style-type:decimal}.prose :where(ol[type=A]):not(:where([class~=not-prose],[class~=not-prose] *)){list-style-type:upper-alpha}.prose :where(ol[type=a]):not(:where([class~=not-prose],[class~=not-prose] *)){list-style-type:lower-alpha}.prose :where(ol[type=A s]):not(:where([class~=not-prose],[class~=not-prose] *)){list-style-type:upper-alpha}.prose :where(ol[type=a s]):not(:where([class~=not-prose],[class~=not-prose] *)){list-style-type:lower-alpha}.prose :where(ol[type=I]):not(:where([class~=not-prose],[class~=not-prose] *)){list-style-type:upper-roman}.prose :where(ol[type=i]):not(:where([class~=not-prose],[class~=not-prose] *)){list-style-type:lower-roman}.prose :where(ol[type=I s]):not(:where([class~=not-prose],[class~=not-prose] *)){list-style-type:upper-roman}.prose :where(ol[type=i s]):not(:where([class~=not-prose],[class~=not-prose] *)){list-style-type:lower-roman}.prose :where(ol[type="1"]):not(:where([class~=not-prose],[class~=not-prose] *)){list-style-type:decimal}.prose :where(ul):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:1.25em;margin-bottom:1.25em;padding-inline-start:1.625em;list-style-type:disc}.prose :where(ol>li):not(:where([class~=not-prose],[class~=not-prose] *))::marker{color:var(--tw-prose-counters);font-weight:400}.prose :where(ul>li):not(:where([class~=not-prose],[class~=not-prose] *))::marker{color:var(--tw-prose-bullets)}.prose :where(dt):not(:where([class~=not-prose],[class~=not-prose] *)){color:var(--tw-prose-headings);margin-top:1.25em;font-weight:600}.prose :where(hr):not(:where([class~=not-prose],[class~=not-prose] *)){border-color:var(--tw-prose-hr);border-top-width:1px;margin-top:3em;margin-bottom:3em}.prose :where(blockquote):not(:where([class~=not-prose],[class~=not-prose] *)){color:var(--tw-prose-quotes);border-inline-start-width:.25rem;border-inline-start-color:var(--tw-prose-quote-borders);quotes:"“""”""‘""’";margin-top:1.6em;margin-bottom:1.6em;padding-inline-start:1em;font-style:italic;font-weight:500}.prose :where(blockquote p:first-of-type):not(:where([class~=not-prose],[class~=not-prose] *)):before{content:open-quote}.prose :where(blockquote p:last-of-type):not(:where([class~=not-prose],[class~=not-prose] *)):after{content:close-quote}.prose :where(h1):not(:where([class~=not-prose],[class~=not-prose] *)){color:var(--tw-prose-headings);margin-top:0;margin-bottom:.888889em;font-size:2.25em;font-weight:800;line-height:1.11111}.prose :where(h1 strong):not(:where([class~=not-prose],[class~=not-prose] *)){color:inherit;font-weight:900}.prose :where(h2):not(:where([class~=not-prose],[class~=not-prose] *)){color:var(--tw-prose-headings);margin-top:2em;margin-bottom:1em;font-size:1.5em;font-weight:700;line-height:1.33333}.prose :where(h2 strong):not(:where([class~=not-prose],[class~=not-prose] *)){color:inherit;font-weight:800}.prose :where(h3):not(:where([class~=not-prose],[class~=not-prose] *)){color:var(--tw-prose-headings);margin-top:1.6em;margin-bottom:.6em;font-size:1.25em;font-weight:600;line-height:1.6}.prose :where(h3 strong):not(:where([class~=not-prose],[class~=not-prose] *)){color:inherit;font-weight:700}.prose :where(h4):not(:where([class~=not-prose],[class~=not-prose] *)){color:var(--tw-prose-headings);margin-top:1.5em;margin-bottom:.5em;font-weight:600;line-height:1.5}.prose :where(h4 strong):not(:where([class~=not-prose],[class~=not-prose] *)){color:inherit;font-weight:700}.prose :where(img):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:2em;margin-bottom:2em}.prose :where(picture):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:2em;margin-bottom:2em;display:block}.prose :where(video):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:2em;margin-bottom:2em}.prose :where(kbd):not(:where([class~=not-prose],[class~=not-prose] *)){color:var(--tw-prose-kbd);box-shadow:0 0 0 1px var(--tw-prose-kbd-shadows), 0 3px 0 var(--tw-prose-kbd-shadows);padding-top:.1875em;padding-inline-end:.375em;padding-bottom:.1875em;border-radius:.3125rem;padding-inline-start:.375em;font-family:inherit;font-size:.875em;font-weight:500}.prose :where(code):not(:where([class~=not-prose],[class~=not-prose] *)){color:var(--tw-prose-code);font-size:.875em;font-weight:600}.prose :where(code):not(:where([class~=not-prose],[class~=not-prose] *)):before,.prose :where(code):not(:where([class~=not-prose],[class~=not-prose] *)):after{content:"\`"}.prose :where(a code):not(:where([class~=not-prose],[class~=not-prose] *)),.prose :where(h1 code):not(:where([class~=not-prose],[class~=not-prose] *)){color:inherit}.prose :where(h2 code):not(:where([class~=not-prose],[class~=not-prose] *)){color:inherit;font-size:.875em}.prose :where(h3 code):not(:where([class~=not-prose],[class~=not-prose] *)){color:inherit;font-size:.9em}.prose :where(h4 code):not(:where([class~=not-prose],[class~=not-prose] *)),.prose :where(blockquote code):not(:where([class~=not-prose],[class~=not-prose] *)),.prose :where(thead th code):not(:where([class~=not-prose],[class~=not-prose] *)){color:inherit}.prose :where(pre):not(:where([class~=not-prose],[class~=not-prose] *)){color:var(--tw-prose-pre-code);background-color:var(--tw-prose-pre-bg);padding-top:.857143em;padding-inline-end:1.14286em;padding-bottom:.857143em;border-radius:.375rem;margin-top:1.71429em;margin-bottom:1.71429em;padding-inline-start:1.14286em;font-size:.875em;font-weight:400;line-height:1.71429;overflow-x:auto}.prose :where(pre code):not(:where([class~=not-prose],[class~=not-prose] *)){font-weight:inherit;color:inherit;font-size:inherit;font-family:inherit;line-height:inherit;background-color:#0000;border-width:0;border-radius:0;padding:0}.prose :where(pre code):not(:where([class~=not-prose],[class~=not-prose] *)):before,.prose :where(pre code):not(:where([class~=not-prose],[class~=not-prose] *)):after{content:none}.prose :where(table):not(:where([class~=not-prose],[class~=not-prose] *)){table-layout:auto;width:100%;margin-top:2em;margin-bottom:2em;font-size:.875em;line-height:1.71429}.prose :where(thead):not(:where([class~=not-prose],[class~=not-prose] *)){border-bottom-width:1px;border-bottom-color:var(--tw-prose-th-borders)}.prose :where(thead th):not(:where([class~=not-prose],[class~=not-prose] *)){color:var(--tw-prose-headings);vertical-align:bottom;padding-inline-end:.571429em;padding-bottom:.571429em;padding-inline-start:.571429em;font-weight:600}.prose :where(tbody tr):not(:where([class~=not-prose],[class~=not-prose] *)){border-bottom-width:1px;border-bottom-color:var(--tw-prose-td-borders)}.prose :where(tbody tr:last-child):not(:where([class~=not-prose],[class~=not-prose] *)){border-bottom-width:0}.prose :where(tbody td):not(:where([class~=not-prose],[class~=not-prose] *)){vertical-align:baseline}.prose :where(tfoot):not(:where([class~=not-prose],[class~=not-prose] *)){border-top-width:1px;border-top-color:var(--tw-prose-th-borders)}.prose :where(tfoot td):not(:where([class~=not-prose],[class~=not-prose] *)){vertical-align:top}.prose :where(th,td):not(:where([class~=not-prose],[class~=not-prose] *)){text-align:start}.prose :where(figure>*):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:0;margin-bottom:0}.prose :where(figcaption):not(:where([class~=not-prose],[class~=not-prose] *)){color:var(--tw-prose-captions);margin-top:.857143em;font-size:.875em;line-height:1.42857}.prose{--tw-prose-body:oklch(37.3% .034 259.733);--tw-prose-headings:oklch(21% .034 264.665);--tw-prose-lead:oklch(44.6% .03 256.802);--tw-prose-links:oklch(21% .034 264.665);--tw-prose-bold:oklch(21% .034 264.665);--tw-prose-counters:oklch(55.1% .027 264.364);--tw-prose-bullets:oklch(87.2% .01 258.338);--tw-prose-hr:oklch(92.8% .006 264.531);--tw-prose-quotes:oklch(21% .034 264.665);--tw-prose-quote-borders:oklch(92.8% .006 264.531);--tw-prose-captions:oklch(55.1% .027 264.364);--tw-prose-kbd:oklch(21% .034 264.665);--tw-prose-kbd-shadows:oklab(21% -.00316127 -.0338527/.1);--tw-prose-code:oklch(21% .034 264.665);--tw-prose-pre-code:oklch(92.8% .006 264.531);--tw-prose-pre-bg:oklch(27.8% .033 256.848);--tw-prose-th-borders:oklch(87.2% .01 258.338);--tw-prose-td-borders:oklch(92.8% .006 264.531);--tw-prose-invert-body:oklch(87.2% .01 258.338);--tw-prose-invert-headings:#fff;--tw-prose-invert-lead:oklch(70.7% .022 261.325);--tw-prose-invert-links:#fff;--tw-prose-invert-bold:#fff;--tw-prose-invert-counters:oklch(70.7% .022 261.325);--tw-prose-invert-bullets:oklch(44.6% .03 256.802);--tw-prose-invert-hr:oklch(37.3% .034 259.733);--tw-prose-invert-quotes:oklch(96.7% .003 264.542);--tw-prose-invert-quote-borders:oklch(37.3% .034 259.733);--tw-prose-invert-captions:oklch(70.7% .022 261.325);--tw-prose-invert-kbd:#fff;--tw-prose-invert-kbd-shadows:#ffffff1a;--tw-prose-invert-code:#fff;--tw-prose-invert-pre-code:oklch(87.2% .01 258.338);--tw-prose-invert-pre-bg:#00000080;--tw-prose-invert-th-borders:oklch(44.6% .03 256.802);--tw-prose-invert-td-borders:oklch(37.3% .034 259.733);font-size:1rem;line-height:1.75}.prose :where(picture>img):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:0;margin-bottom:0}.prose :where(li):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:.5em;margin-bottom:.5em}.prose :where(ol>li):not(:where([class~=not-prose],[class~=not-prose] *)),.prose :where(ul>li):not(:where([class~=not-prose],[class~=not-prose] *)){padding-inline-start:.375em}.prose :where(.prose>ul>li p):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:.75em;margin-bottom:.75em}.prose :where(.prose>ul>li>p:first-child):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:1.25em}.prose :where(.prose>ul>li>p:last-child):not(:where([class~=not-prose],[class~=not-prose] *)){margin-bottom:1.25em}.prose :where(.prose>ol>li>p:first-child):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:1.25em}.prose :where(.prose>ol>li>p:last-child):not(:where([class~=not-prose],[class~=not-prose] *)){margin-bottom:1.25em}.prose :where(ul ul,ul ol,ol ul,ol ol):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:.75em;margin-bottom:.75em}.prose :where(dl):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:1.25em;margin-bottom:1.25em}.prose :where(dd):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:.5em;padding-inline-start:1.625em}.prose :where(hr+*):not(:where([class~=not-prose],[class~=not-prose] *)),.prose :where(h2+*):not(:where([class~=not-prose],[class~=not-prose] *)),.prose :where(h3+*):not(:where([class~=not-prose],[class~=not-prose] *)),.prose :where(h4+*):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:0}.prose :where(thead th:first-child):not(:where([class~=not-prose],[class~=not-prose] *)){padding-inline-start:0}.prose :where(thead th:last-child):not(:where([class~=not-prose],[class~=not-prose] *)){padding-inline-end:0}.prose :where(tbody td,tfoot td):not(:where([class~=not-prose],[class~=not-prose] *)){padding-top:.571429em;padding-inline-end:.571429em;padding-bottom:.571429em;padding-inline-start:.571429em}.prose :where(tbody td:first-child,tfoot td:first-child):not(:where([class~=not-prose],[class~=not-prose] *)){padding-inline-start:0}.prose :where(tbody td:last-child,tfoot td:last-child):not(:where([class~=not-prose],[class~=not-prose] *)){padding-inline-end:0}.prose :where(figure):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:2em;margin-bottom:2em}.prose :where(.prose>:first-child):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:0}.prose :where(.prose>:last-child):not(:where([class~=not-prose],[class~=not-prose] *)){margin-bottom:0}.prose-sm{font-size:.875rem;line-height:1.71429}.prose-sm :where(p):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:1.14286em;margin-bottom:1.14286em}.prose-sm :where([class~=lead]):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:.888889em;margin-bottom:.888889em;font-size:1.28571em;line-height:1.55556}.prose-sm :where(blockquote):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:1.33333em;margin-bottom:1.33333em;padding-inline-start:1.11111em}.prose-sm :where(h1):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:0;margin-bottom:.8em;font-size:2.14286em;line-height:1.2}.prose-sm :where(h2):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:1.6em;margin-bottom:.8em;font-size:1.42857em;line-height:1.4}.prose-sm :where(h3):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:1.55556em;margin-bottom:.444444em;font-size:1.28571em;line-height:1.55556}.prose-sm :where(h4):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:1.42857em;margin-bottom:.571429em;line-height:1.42857}.prose-sm :where(img):not(:where([class~=not-prose],[class~=not-prose] *)),.prose-sm :where(picture):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:1.71429em;margin-bottom:1.71429em}.prose-sm :where(picture>img):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:0;margin-bottom:0}.prose-sm :where(video):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:1.71429em;margin-bottom:1.71429em}.prose-sm :where(kbd):not(:where([class~=not-prose],[class~=not-prose] *)){padding-top:.142857em;padding-inline-end:.357143em;padding-bottom:.142857em;border-radius:.3125rem;padding-inline-start:.357143em;font-size:.857143em}.prose-sm :where(code):not(:where([class~=not-prose],[class~=not-prose] *)){font-size:.857143em}.prose-sm :where(h2 code):not(:where([class~=not-prose],[class~=not-prose] *)){font-size:.9em}.prose-sm :where(h3 code):not(:where([class~=not-prose],[class~=not-prose] *)){font-size:.888889em}.prose-sm :where(pre):not(:where([class~=not-prose],[class~=not-prose] *)){padding-top:.666667em;padding-inline-end:1em;padding-bottom:.666667em;border-radius:.25rem;margin-top:1.66667em;margin-bottom:1.66667em;padding-inline-start:1em;font-size:.857143em;line-height:1.66667}.prose-sm :where(ol):not(:where([class~=not-prose],[class~=not-prose] *)),.prose-sm :where(ul):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:1.14286em;margin-bottom:1.14286em;padding-inline-start:1.57143em}.prose-sm :where(li):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:.285714em;margin-bottom:.285714em}.prose-sm :where(ol>li):not(:where([class~=not-prose],[class~=not-prose] *)),.prose-sm :where(ul>li):not(:where([class~=not-prose],[class~=not-prose] *)){padding-inline-start:.428571em}.prose-sm :where(.prose-sm>ul>li p):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:.571429em;margin-bottom:.571429em}.prose-sm :where(.prose-sm>ul>li>p:first-child):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:1.14286em}.prose-sm :where(.prose-sm>ul>li>p:last-child):not(:where([class~=not-prose],[class~=not-prose] *)){margin-bottom:1.14286em}.prose-sm :where(.prose-sm>ol>li>p:first-child):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:1.14286em}.prose-sm :where(.prose-sm>ol>li>p:last-child):not(:where([class~=not-prose],[class~=not-prose] *)){margin-bottom:1.14286em}.prose-sm :where(ul ul,ul ol,ol ul,ol ol):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:.571429em;margin-bottom:.571429em}.prose-sm :where(dl):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:1.14286em;margin-bottom:1.14286em}.prose-sm :where(dt):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:1.14286em}.prose-sm :where(dd):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:.285714em;padding-inline-start:1.57143em}.prose-sm :where(hr):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:2.85714em;margin-bottom:2.85714em}.prose-sm :where(hr+*):not(:where([class~=not-prose],[class~=not-prose] *)),.prose-sm :where(h2+*):not(:where([class~=not-prose],[class~=not-prose] *)),.prose-sm :where(h3+*):not(:where([class~=not-prose],[class~=not-prose] *)),.prose-sm :where(h4+*):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:0}.prose-sm :where(table):not(:where([class~=not-prose],[class~=not-prose] *)){font-size:.857143em;line-height:1.5}.prose-sm :where(thead th):not(:where([class~=not-prose],[class~=not-prose] *)){padding-inline-end:1em;padding-bottom:.666667em;padding-inline-start:1em}.prose-sm :where(thead th:first-child):not(:where([class~=not-prose],[class~=not-prose] *)){padding-inline-start:0}.prose-sm :where(thead th:last-child):not(:where([class~=not-prose],[class~=not-prose] *)){padding-inline-end:0}.prose-sm :where(tbody td,tfoot td):not(:where([class~=not-prose],[class~=not-prose] *)){padding-top:.666667em;padding-inline-end:1em;padding-bottom:.666667em;padding-inline-start:1em}.prose-sm :where(tbody td:first-child,tfoot td:first-child):not(:where([class~=not-prose],[class~=not-prose] *)){padding-inline-start:0}.prose-sm :where(tbody td:last-child,tfoot td:last-child):not(:where([class~=not-prose],[class~=not-prose] *)){padding-inline-end:0}.prose-sm :where(figure):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:1.71429em;margin-bottom:1.71429em}.prose-sm :where(figure>*):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:0;margin-bottom:0}.prose-sm :where(figcaption):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:.666667em;font-size:.857143em;line-height:1.33333}.prose-sm :where(.prose-sm>:first-child):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:0}.prose-sm :where(.prose-sm>:last-child):not(:where([class~=not-prose],[class~=not-prose] *)){margin-bottom:0}.mt-1{margin-top:var(--spacing)}.mt-1\\.5{margin-top:calc(var(--spacing) * 1.5)}.mt-2{margin-top:calc(var(--spacing) * 2)}.mt-2\\.5{margin-top:calc(var(--spacing) * 2.5)}.mt-3{margin-top:calc(var(--spacing) * 3)}.mb-1{margin-bottom:var(--spacing)}.mb-1\\.5{margin-bottom:calc(var(--spacing) * 1.5)}.mb-2{margin-bottom:calc(var(--spacing) * 2)}.mb-3{margin-bottom:calc(var(--spacing) * 3)}.mb-4{margin-bottom:calc(var(--spacing) * 4)}.mb-5{margin-bottom:calc(var(--spacing) * 5)}.mb-8{margin-bottom:calc(var(--spacing) * 8)}.ml-2{margin-left:calc(var(--spacing) * 2)}.ml-auto{margin-left:auto}.block{display:block}.flex{display:flex}.grid{display:grid}.hidden{display:none}.inline{display:inline}.inline-flex{display:inline-flex}.\\!h-6{height:calc(var(--spacing) * 6)!important}.h-3{height:calc(var(--spacing) * 3)}.h-4{height:calc(var(--spacing) * 4)}.h-5{height:calc(var(--spacing) * 5)}.h-8{height:calc(var(--spacing) * 8)}.h-9{height:calc(var(--spacing) * 9)}.h-20{height:calc(var(--spacing) * 20)}.h-\\[18px\\]{height:18px}.max-h-56{max-height:calc(var(--spacing) * 56)}.\\!w-6{width:calc(var(--spacing) * 6)!important}.w-1\\/4{width:25%}.w-3\\/4{width:75%}.w-4{width:calc(var(--spacing) * 4)}.w-8{width:calc(var(--spacing) * 8)}.w-9{width:calc(var(--spacing) * 9)}.w-16{width:calc(var(--spacing) * 16)}.w-80{width:calc(var(--spacing) * 80)}.w-\\[18px\\]{width:18px}.w-full{width:100%}.w-px{width:1px}.max-w-\\[calc\\(100vw-4rem\\)\\]{max-width:calc(100vw - 4rem)}.max-w-none{max-width:none}.min-w-0{min-width:0}.min-w-6{min-width:calc(var(--spacing) * 6)}.flex-1{flex:1}.shrink-0{flex-shrink:0}.animate-pulse{animation:var(--animate-pulse)}.cursor-pointer{cursor:pointer}.resize-y{resize:vertical}.grid-cols-3{grid-template-columns:repeat(3,minmax(0,1fr))}.flex-wrap{flex-wrap:wrap}.items-baseline{align-items:baseline}.items-center{align-items:center}.justify-between{justify-content:space-between}.justify-center{justify-content:center}.justify-end{justify-content:flex-end}.gap-0\\.5{gap:calc(var(--spacing) * .5)}.gap-1{gap:var(--spacing)}.gap-1\\.5{gap:calc(var(--spacing) * 1.5)}.gap-2{gap:calc(var(--spacing) * 2)}.gap-3{gap:calc(var(--spacing) * 3)}:where(.space-y-2>:not(:last-child)){--tw-space-y-reverse:0;margin-block-start:calc(calc(var(--spacing) * 2) * var(--tw-space-y-reverse));margin-block-end:calc(calc(var(--spacing) * 2) * calc(1 - var(--tw-space-y-reverse)))}:where(.space-y-3>:not(:last-child)){--tw-space-y-reverse:0;margin-block-start:calc(calc(var(--spacing) * 3) * var(--tw-space-y-reverse));margin-block-end:calc(calc(var(--spacing) * 3) * calc(1 - var(--tw-space-y-reverse)))}:where(.space-y-5>:not(:last-child)){--tw-space-y-reverse:0;margin-block-start:calc(calc(var(--spacing) * 5) * var(--tw-space-y-reverse));margin-block-end:calc(calc(var(--spacing) * 5) * calc(1 - var(--tw-space-y-reverse)))}.gap-x-2{column-gap:calc(var(--spacing) * 2)}.gap-y-0\\.5{row-gap:calc(var(--spacing) * .5)}.overflow-hidden{overflow:hidden}.overflow-y-auto{overflow-y:auto}.rounded{border-radius:.25rem}.rounded-2xl{border-radius:var(--radius-2xl)}.rounded-full{border-radius:3.40282e38px}.rounded-lg{border-radius:var(--radius-lg)}.rounded-xl{border-radius:var(--radius-xl)}.border{border-style:var(--tw-border-style);border-width:1px}.border-0{border-style:var(--tw-border-style);border-width:0}.border-b{border-bottom-style:var(--tw-border-style);border-bottom-width:1px}.border-dashed{--tw-border-style:dashed;border-style:dashed}.border-red-200{border-color:var(--color-red-200)}.border-slate-100{border-color:var(--color-slate-100)}.border-slate-200{border-color:var(--color-slate-200)}.border-slate-300{border-color:var(--color-slate-300)}.bg-red-50{background-color:var(--color-red-50)}.bg-red-600{background-color:var(--color-red-600)}.bg-slate-50{background-color:var(--color-slate-50)}.bg-slate-100{background-color:var(--color-slate-100)}.bg-slate-200{background-color:var(--color-slate-200)}.bg-slate-900{background-color:var(--color-slate-900)}.bg-transparent{background-color:#0000}.bg-white{background-color:var(--color-white)}.bg-white\\/95{background-color:#fffffff2}@supports (color:color-mix(in lab, red, red)){.bg-white\\/95{background-color:color-mix(in oklab, var(--color-white) 95%, transparent)}}.bg-gradient-to-br{--tw-gradient-position:to bottom right in oklab;background-image:linear-gradient(var(--tw-gradient-stops))}.bg-gradient-to-r{--tw-gradient-position:to right in oklab;background-image:linear-gradient(var(--tw-gradient-stops))}.from-fuchsia-500{--tw-gradient-from:var(--color-fuchsia-500);--tw-gradient-stops:var(--tw-gradient-via-stops,var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position))}.from-slate-50{--tw-gradient-from:var(--color-slate-50);--tw-gradient-stops:var(--tw-gradient-via-stops,var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position))}.to-pink-500{--tw-gradient-to:var(--color-pink-500);--tw-gradient-stops:var(--tw-gradient-via-stops,var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position))}.to-slate-200{--tw-gradient-to:var(--color-slate-200);--tw-gradient-stops:var(--tw-gradient-via-stops,var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position))}.object-cover{object-fit:cover}.p-1\\.5{padding:calc(var(--spacing) * 1.5)}.p-3{padding:calc(var(--spacing) * 3)}.px-1\\.5{padding-inline:calc(var(--spacing) * 1.5)}.px-2{padding-inline:calc(var(--spacing) * 2)}.px-2\\.5{padding-inline:calc(var(--spacing) * 2.5)}.px-3{padding-inline:calc(var(--spacing) * 3)}.px-4{padding-inline:calc(var(--spacing) * 4)}.px-6{padding-inline:calc(var(--spacing) * 6)}.py-0\\.5{padding-block:calc(var(--spacing) * .5)}.py-1{padding-block:var(--spacing)}.py-1\\.5{padding-block:calc(var(--spacing) * 1.5)}.py-2{padding-block:calc(var(--spacing) * 2)}.py-3{padding-block:calc(var(--spacing) * 3)}.py-6{padding-block:calc(var(--spacing) * 6)}.py-12{padding-block:calc(var(--spacing) * 12)}.pt-1{padding-top:var(--spacing)}.pb-3{padding-bottom:calc(var(--spacing) * 3)}.pl-4{padding-left:calc(var(--spacing) * 4)}.text-center{text-align:center}.font-mono{font-family:var(--font-mono)}.font-sans{font-family:var(--font-sans)}.font-serif{font-family:var(--font-serif)}.text-3xl{font-size:var(--text-3xl);line-height:var(--tw-leading,var(--text-3xl--line-height))}.text-base{font-size:var(--text-base);line-height:var(--tw-leading,var(--text-base--line-height))}.text-lg{font-size:var(--text-lg);line-height:var(--tw-leading,var(--text-lg--line-height))}.text-sm{font-size:var(--text-sm);line-height:var(--tw-leading,var(--text-sm--line-height))}.text-xl{font-size:var(--text-xl);line-height:var(--tw-leading,var(--text-xl--line-height))}.text-xs{font-size:var(--text-xs);line-height:var(--tw-leading,var(--text-xs--line-height))}.text-\\[10px\\]{font-size:10px}.leading-none{--tw-leading:1;line-height:1}.leading-relaxed{--tw-leading:var(--leading-relaxed);line-height:var(--leading-relaxed)}.font-bold{--tw-font-weight:var(--font-weight-bold);font-weight:var(--font-weight-bold)}.font-extrabold{--tw-font-weight:var(--font-weight-extrabold);font-weight:var(--font-weight-extrabold)}.font-medium{--tw-font-weight:var(--font-weight-medium);font-weight:var(--font-weight-medium)}.font-semibold{--tw-font-weight:var(--font-weight-semibold);font-weight:var(--font-weight-semibold)}.tracking-tight{--tw-tracking:var(--tracking-tight);letter-spacing:var(--tracking-tight)}.tracking-wide{--tw-tracking:var(--tracking-wide);letter-spacing:var(--tracking-wide)}.text-red-500{color:var(--color-red-500)}.text-red-600{color:var(--color-red-600)}.text-slate-300{color:var(--color-slate-300)}.text-slate-400{color:var(--color-slate-400)}.text-slate-500{color:var(--color-slate-500)}.text-slate-600{color:var(--color-slate-600)}.text-slate-800{color:var(--color-slate-800)}.text-slate-900{color:var(--color-slate-900)}.text-white{color:var(--color-white)}.uppercase{text-transform:uppercase}.italic{font-style:italic}.tabular-nums{--tw-numeric-spacing:tabular-nums;font-variant-numeric:var(--tw-ordinal,) var(--tw-slashed-zero,) var(--tw-numeric-figure,) var(--tw-numeric-spacing,) var(--tw-numeric-fraction,)}.line-through{text-decoration-line:line-through}.antialiased{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}.shadow-lg{--tw-shadow:0 10px 15px -3px var(--tw-shadow-color,#0000001a), 0 4px 6px -4px var(--tw-shadow-color,#0000001a);box-shadow:var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)}.shadow-sm{--tw-shadow:0 1px 3px 0 var(--tw-shadow-color,#0000001a), 0 1px 2px -1px var(--tw-shadow-color,#0000001a);box-shadow:var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)}.shadow-xl{--tw-shadow:0 20px 25px -5px var(--tw-shadow-color,#0000001a), 0 8px 10px -6px var(--tw-shadow-color,#0000001a);box-shadow:var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)}.ring-4{--tw-ring-shadow:var(--tw-ring-inset,) 0 0 0 calc(4px + var(--tw-ring-offset-width)) var(--tw-ring-color,currentcolor);box-shadow:var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)}.ring-slate-900\\/5{--tw-ring-color:#0f172b0d}@supports (color:color-mix(in lab, red, red)){.ring-slate-900\\/5{--tw-ring-color:color-mix(in oklab, var(--color-slate-900) 5%, transparent)}}.backdrop-blur-sm{--tw-backdrop-blur:blur(var(--blur-sm));-webkit-backdrop-filter:var(--tw-backdrop-blur,) var(--tw-backdrop-brightness,) var(--tw-backdrop-contrast,) var(--tw-backdrop-grayscale,) var(--tw-backdrop-hue-rotate,) var(--tw-backdrop-invert,) var(--tw-backdrop-opacity,) var(--tw-backdrop-saturate,) var(--tw-backdrop-sepia,);backdrop-filter:var(--tw-backdrop-blur,) var(--tw-backdrop-brightness,) var(--tw-backdrop-contrast,) var(--tw-backdrop-grayscale,) var(--tw-backdrop-hue-rotate,) var(--tw-backdrop-invert,) var(--tw-backdrop-opacity,) var(--tw-backdrop-saturate,) var(--tw-backdrop-sepia,)}.transition-all{transition-property:all;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration))}.transition-colors{transition-property:color,background-color,border-color,outline-color,text-decoration-color,fill,stroke,--tw-gradient-from,--tw-gradient-via,--tw-gradient-to;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration))}.transition-opacity{transition-property:opacity;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration))}.duration-200{--tw-duration:.2s;transition-duration:.2s}.prose-slate{--tw-prose-body:oklch(37.2% .044 257.287);--tw-prose-headings:oklch(20.8% .042 265.755);--tw-prose-lead:oklch(44.6% .043 257.281);--tw-prose-links:oklch(20.8% .042 265.755);--tw-prose-bold:oklch(20.8% .042 265.755);--tw-prose-counters:oklch(55.4% .046 257.417);--tw-prose-bullets:oklch(86.9% .022 252.894);--tw-prose-hr:oklch(92.9% .013 255.508);--tw-prose-quotes:oklch(20.8% .042 265.755);--tw-prose-quote-borders:oklch(92.9% .013 255.508);--tw-prose-captions:oklch(55.4% .046 257.417);--tw-prose-kbd:oklch(20.8% .042 265.755);--tw-prose-kbd-shadows:oklab(20.8% -.00310889 -.0418848/.1);--tw-prose-code:oklch(20.8% .042 265.755);--tw-prose-pre-code:oklch(92.9% .013 255.508);--tw-prose-pre-bg:oklch(27.9% .041 260.031);--tw-prose-th-borders:oklch(86.9% .022 252.894);--tw-prose-td-borders:oklch(92.9% .013 255.508);--tw-prose-invert-body:oklch(86.9% .022 252.894);--tw-prose-invert-headings:#fff;--tw-prose-invert-lead:oklch(70.4% .04 256.788);--tw-prose-invert-links:#fff;--tw-prose-invert-bold:#fff;--tw-prose-invert-counters:oklch(70.4% .04 256.788);--tw-prose-invert-bullets:oklch(44.6% .043 257.281);--tw-prose-invert-hr:oklch(37.2% .044 257.287);--tw-prose-invert-quotes:oklch(96.8% .007 247.896);--tw-prose-invert-quote-borders:oklch(37.2% .044 257.287);--tw-prose-invert-captions:oklch(70.4% .04 256.788);--tw-prose-invert-kbd:#fff;--tw-prose-invert-kbd-shadows:#ffffff1a;--tw-prose-invert-code:#fff;--tw-prose-invert-pre-code:oklch(86.9% .022 252.894);--tw-prose-invert-pre-bg:#00000080;--tw-prose-invert-th-borders:oklch(44.6% .043 257.281);--tw-prose-invert-td-borders:oklch(37.2% .044 257.287)}.select-none{-webkit-user-select:none;user-select:none}.placeholder\\:text-slate-400::placeholder{color:var(--color-slate-400)}@media (hover:hover){.hover\\:rotate-12:hover{rotate:12deg}.hover\\:border-slate-300:hover{border-color:var(--color-slate-300)}.hover\\:bg-red-500:hover{background-color:var(--color-red-500)}.hover\\:bg-slate-50:hover{background-color:var(--color-slate-50)}.hover\\:bg-slate-100:hover{background-color:var(--color-slate-100)}.hover\\:bg-slate-700:hover{background-color:var(--color-slate-700)}.hover\\:text-blue-600:hover{color:var(--color-blue-600)}.hover\\:text-red-600:hover{color:var(--color-red-600)}.hover\\:text-slate-600:hover{color:var(--color-slate-600)}.hover\\:text-slate-700:hover{color:var(--color-slate-700)}.hover\\:text-slate-800:hover{color:var(--color-slate-800)}.hover\\:opacity-75:hover{opacity:.75}}.focus\\:border-blue-500:focus{border-color:var(--color-blue-500)}.focus\\:border-slate-400:focus{border-color:var(--color-slate-400)}.focus\\:outline-none:focus{--tw-outline-style:none;outline-style:none}.focus-visible\\:ring-2:focus-visible{--tw-ring-shadow:var(--tw-ring-inset,) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color,currentcolor);box-shadow:var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)}.focus-visible\\:ring-red-500\\/40:focus-visible{--tw-ring-color:#fb2c3666}@supports (color:color-mix(in lab, red, red)){.focus-visible\\:ring-red-500\\/40:focus-visible{--tw-ring-color:color-mix(in oklab, var(--color-red-500) 40%, transparent)}}.focus-visible\\:ring-slate-900\\/40:focus-visible{--tw-ring-color:#0f172b66}@supports (color:color-mix(in lab, red, red)){.focus-visible\\:ring-slate-900\\/40:focus-visible{--tw-ring-color:color-mix(in oklab, var(--color-slate-900) 40%, transparent)}}.disabled\\:cursor-not-allowed:disabled{cursor:not-allowed}.disabled\\:opacity-40:disabled{opacity:.4}.disabled\\:opacity-50:disabled{opacity:.5}.disabled\\:opacity-60:disabled{opacity:.6}@media (min-width:40rem){.sm\\:inline{display:inline}}.dark\\:border-red-900\\/50:where(.dark,.dark *){border-color:#82181a80}@supports (color:color-mix(in lab, red, red)){.dark\\:border-red-900\\/50:where(.dark,.dark *){border-color:color-mix(in oklab, var(--color-red-900) 50%, transparent)}}.dark\\:border-slate-600:where(.dark,.dark *){border-color:var(--color-slate-600)}.dark\\:border-slate-700:where(.dark,.dark *){border-color:var(--color-slate-700)}.dark\\:border-slate-800:where(.dark,.dark *){border-color:var(--color-slate-800)}.dark\\:bg-red-950\\/40:where(.dark,.dark *){background-color:#46080966}@supports (color:color-mix(in lab, red, red)){.dark\\:bg-red-950\\/40:where(.dark,.dark *){background-color:color-mix(in oklab, var(--color-red-950) 40%, transparent)}}.dark\\:bg-slate-700:where(.dark,.dark *){background-color:var(--color-slate-700)}.dark\\:bg-slate-800:where(.dark,.dark *){background-color:var(--color-slate-800)}.dark\\:bg-slate-800\\/60:where(.dark,.dark *){background-color:#1d293d99}@supports (color:color-mix(in lab, red, red)){.dark\\:bg-slate-800\\/60:where(.dark,.dark *){background-color:color-mix(in oklab, var(--color-slate-800) 60%, transparent)}}.dark\\:bg-slate-900:where(.dark,.dark *){background-color:var(--color-slate-900)}.dark\\:bg-slate-900\\/95:where(.dark,.dark *){background-color:#0f172bf2}@supports (color:color-mix(in lab, red, red)){.dark\\:bg-slate-900\\/95:where(.dark,.dark *){background-color:color-mix(in oklab, var(--color-slate-900) 95%, transparent)}}.dark\\:bg-white:where(.dark,.dark *){background-color:var(--color-white)}.dark\\:from-slate-800:where(.dark,.dark *){--tw-gradient-from:var(--color-slate-800);--tw-gradient-stops:var(--tw-gradient-via-stops,var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position))}.dark\\:to-slate-700:where(.dark,.dark *){--tw-gradient-to:var(--color-slate-700);--tw-gradient-stops:var(--tw-gradient-via-stops,var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position))}.dark\\:text-red-400:where(.dark,.dark *){color:var(--color-red-400)}.dark\\:text-slate-100:where(.dark,.dark *){color:var(--color-slate-100)}.dark\\:text-slate-300:where(.dark,.dark *){color:var(--color-slate-300)}.dark\\:text-slate-400:where(.dark,.dark *){color:var(--color-slate-400)}.dark\\:text-slate-500:where(.dark,.dark *){color:var(--color-slate-500)}.dark\\:text-slate-600:where(.dark,.dark *){color:var(--color-slate-600)}.dark\\:text-slate-900:where(.dark,.dark *){color:var(--color-slate-900)}.dark\\:text-white:where(.dark,.dark *){color:var(--color-white)}.dark\\:ring-white\\/5:where(.dark,.dark *){--tw-ring-color:#ffffff0d}@supports (color:color-mix(in lab, red, red)){.dark\\:ring-white\\/5:where(.dark,.dark *){--tw-ring-color:color-mix(in oklab, var(--color-white) 5%, transparent)}}.dark\\:prose-invert:where(.dark,.dark *){--tw-prose-body:var(--tw-prose-invert-body);--tw-prose-headings:var(--tw-prose-invert-headings);--tw-prose-lead:var(--tw-prose-invert-lead);--tw-prose-links:var(--tw-prose-invert-links);--tw-prose-bold:var(--tw-prose-invert-bold);--tw-prose-counters:var(--tw-prose-invert-counters);--tw-prose-bullets:var(--tw-prose-invert-bullets);--tw-prose-hr:var(--tw-prose-invert-hr);--tw-prose-quotes:var(--tw-prose-invert-quotes);--tw-prose-quote-borders:var(--tw-prose-invert-quote-borders);--tw-prose-captions:var(--tw-prose-invert-captions);--tw-prose-kbd:var(--tw-prose-invert-kbd);--tw-prose-kbd-shadows:var(--tw-prose-invert-kbd-shadows);--tw-prose-code:var(--tw-prose-invert-code);--tw-prose-pre-code:var(--tw-prose-invert-pre-code);--tw-prose-pre-bg:var(--tw-prose-invert-pre-bg);--tw-prose-th-borders:var(--tw-prose-invert-th-borders);--tw-prose-td-borders:var(--tw-prose-invert-td-borders)}.dark\\:placeholder\\:text-slate-500:where(.dark,.dark *)::placeholder{color:var(--color-slate-500)}@media (hover:hover){.dark\\:hover\\:border-slate-600:where(.dark,.dark *):hover{border-color:var(--color-slate-600)}.dark\\:hover\\:bg-slate-200:where(.dark,.dark *):hover{background-color:var(--color-slate-200)}.dark\\:hover\\:bg-slate-800:where(.dark,.dark *):hover{background-color:var(--color-slate-800)}.dark\\:hover\\:text-blue-400:where(.dark,.dark *):hover{color:var(--color-blue-400)}.dark\\:hover\\:text-red-400:where(.dark,.dark *):hover{color:var(--color-red-400)}.dark\\:hover\\:text-slate-100:where(.dark,.dark *):hover{color:var(--color-slate-100)}.dark\\:hover\\:text-slate-200:where(.dark,.dark *):hover{color:var(--color-slate-200)}.dark\\:hover\\:text-slate-300:where(.dark,.dark *):hover{color:var(--color-slate-300)}}.dark\\:focus-visible\\:ring-white\\/40:where(.dark,.dark *):focus-visible{--tw-ring-color:#fff6}@supports (color:color-mix(in lab, red, red)){.dark\\:focus-visible\\:ring-white\\/40:where(.dark,.dark *):focus-visible{--tw-ring-color:color-mix(in oklab, var(--color-white) 40%, transparent)}}}@keyframes koe-pop{0%{opacity:0;transform:translateY(4px)scale(.98)}to{opacity:1;transform:none}}.pop-in{animation:.15s ease-out koe-pop}.vote-button.active.up{color:#2563eb;background-color:#eff6ff}.dark .vote-button.active.up{color:#60a5fa;background-color:#2563eb2e}.vote-button.active.down{color:#dc2626;background-color:#fef2f2}.dark .vote-button.active.down{color:#f87171;background-color:#dc26262e}.reaction-button.active{color:#1d4ed8;background-color:#eff6ff;border-color:#93c5fd;font-weight:600}.reaction-button.active .reaction-count{color:#2563eb}.dark .reaction-button.active{color:#93c5fd;background-color:#2563eb2e;border-color:#1e40af}.dark .reaction-button.active .reaction-count{color:#bfdbfe}@property --tw-space-y-reverse{syntax:"*";inherits:false;initial-value:0}@property --tw-border-style{syntax:"*";inherits:false;initial-value:solid}@property --tw-gradient-position{syntax:"*";inherits:false}@property --tw-gradient-from{syntax:"<color>";inherits:false;initial-value:#0000}@property --tw-gradient-via{syntax:"<color>";inherits:false;initial-value:#0000}@property --tw-gradient-to{syntax:"<color>";inherits:false;initial-value:#0000}@property --tw-gradient-stops{syntax:"*";inherits:false}@property --tw-gradient-via-stops{syntax:"*";inherits:false}@property --tw-gradient-from-position{syntax:"<length-percentage>";inherits:false;initial-value:0%}@property --tw-gradient-via-position{syntax:"<length-percentage>";inherits:false;initial-value:50%}@property --tw-gradient-to-position{syntax:"<length-percentage>";inherits:false;initial-value:100%}@property --tw-leading{syntax:"*";inherits:false}@property --tw-font-weight{syntax:"*";inherits:false}@property --tw-tracking{syntax:"*";inherits:false}@property --tw-ordinal{syntax:"*";inherits:false}@property --tw-slashed-zero{syntax:"*";inherits:false}@property --tw-numeric-figure{syntax:"*";inherits:false}@property --tw-numeric-spacing{syntax:"*";inherits:false}@property --tw-numeric-fraction{syntax:"*";inherits:false}@property --tw-shadow{syntax:"*";inherits:false;initial-value:0 0 #0000}@property --tw-shadow-color{syntax:"*";inherits:false}@property --tw-shadow-alpha{syntax:"<percentage>";inherits:false;initial-value:100%}@property --tw-inset-shadow{syntax:"*";inherits:false;initial-value:0 0 #0000}@property --tw-inset-shadow-color{syntax:"*";inherits:false}@property --tw-inset-shadow-alpha{syntax:"<percentage>";inherits:false;initial-value:100%}@property --tw-ring-color{syntax:"*";inherits:false}@property --tw-ring-shadow{syntax:"*";inherits:false;initial-value:0 0 #0000}@property --tw-inset-ring-color{syntax:"*";inherits:false}@property --tw-inset-ring-shadow{syntax:"*";inherits:false;initial-value:0 0 #0000}@property --tw-ring-inset{syntax:"*";inherits:false}@property --tw-ring-offset-width{syntax:"<length>";inherits:false;initial-value:0}@property --tw-ring-offset-color{syntax:"*";inherits:false;initial-value:#fff}@property --tw-ring-offset-shadow{syntax:"*";inherits:false;initial-value:0 0 #0000}@property --tw-backdrop-blur{syntax:"*";inherits:false}@property --tw-backdrop-brightness{syntax:"*";inherits:false}@property --tw-backdrop-contrast{syntax:"*";inherits:false}@property --tw-backdrop-grayscale{syntax:"*";inherits:false}@property --tw-backdrop-hue-rotate{syntax:"*";inherits:false}@property --tw-backdrop-invert{syntax:"*";inherits:false}@property --tw-backdrop-opacity{syntax:"*";inherits:false}@property --tw-backdrop-saturate{syntax:"*";inherits:false}@property --tw-backdrop-sepia{syntax:"*";inherits:false}@property --tw-duration{syntax:"*";inherits:false}@keyframes pulse{50%{opacity:.5}}
+@layer properties{@supports (((-webkit-hyphens:none)) and (not (margin-trim:inline))) or ((-moz-orient:inline) and (not (color:rgb(from red r g b)))){*,:before,:after,::backdrop{--tw-space-y-reverse:0;--tw-border-style:solid;--tw-gradient-position:initial;--tw-gradient-from:#0000;--tw-gradient-via:#0000;--tw-gradient-to:#0000;--tw-gradient-stops:initial;--tw-gradient-via-stops:initial;--tw-gradient-from-position:0%;--tw-gradient-via-position:50%;--tw-gradient-to-position:100%;--tw-leading:initial;--tw-font-weight:initial;--tw-tracking:initial;--tw-ordinal:initial;--tw-slashed-zero:initial;--tw-numeric-figure:initial;--tw-numeric-spacing:initial;--tw-numeric-fraction:initial;--tw-shadow:0 0 #0000;--tw-shadow-color:initial;--tw-shadow-alpha:100%;--tw-inset-shadow:0 0 #0000;--tw-inset-shadow-color:initial;--tw-inset-shadow-alpha:100%;--tw-ring-color:initial;--tw-ring-shadow:0 0 #0000;--tw-inset-ring-color:initial;--tw-inset-ring-shadow:0 0 #0000;--tw-ring-inset:initial;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-offset-shadow:0 0 #0000;--tw-backdrop-blur:initial;--tw-backdrop-brightness:initial;--tw-backdrop-contrast:initial;--tw-backdrop-grayscale:initial;--tw-backdrop-hue-rotate:initial;--tw-backdrop-invert:initial;--tw-backdrop-opacity:initial;--tw-backdrop-saturate:initial;--tw-backdrop-sepia:initial;--tw-duration:initial}}}@layer theme{:root,:host{--font-sans:var(--koe-font);--font-serif:ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;--font-mono:var(--koe-font-mono);--spacing:var(--koe-space);--text-xs:.75rem;--text-xs--line-height:calc(1 / .75);--text-sm:.875rem;--text-sm--line-height:calc(1.25 / .875);--text-base:1rem;--text-base--line-height:calc(1.5 / 1);--text-lg:1.125rem;--text-lg--line-height:calc(1.75 / 1.125);--text-xl:1.25rem;--text-xl--line-height:calc(1.75 / 1.25);--text-3xl:1.875rem;--text-3xl--line-height:calc(2.25 / 1.875);--font-weight-medium:500;--font-weight-semibold:600;--font-weight-bold:700;--font-weight-extrabold:800;--tracking-tight:-.025em;--tracking-wide:.025em;--leading-relaxed:1.625;--radius-md:var(--koe-radius-md);--radius-lg:var(--koe-radius-lg);--radius-xl:var(--koe-radius-xl);--radius-2xl:var(--koe-radius-2xl);--animate-pulse:pulse 2s cubic-bezier(.4, 0, .6, 1) infinite;--blur-sm:8px;--default-transition-duration:.15s;--default-transition-timing-function:cubic-bezier(.4, 0, .2, 1);--default-font-family:var(--font-sans);--default-mono-font-family:var(--font-mono);--color-koe-surface:var(--koe-surface);--color-koe-surface-muted:var(--koe-surface-muted);--color-koe-surface-sunken:var(--koe-surface-sunken);--color-koe-surface-strong:var(--koe-surface-strong);--color-koe-skeleton:var(--koe-skeleton);--color-koe-text:var(--koe-text);--color-koe-text-muted:var(--koe-text-muted);--color-koe-text-subtle:var(--koe-text-subtle);--color-koe-text-inverse:var(--koe-text-inverse);--color-koe-accent:var(--koe-accent);--color-koe-accent-soft:var(--koe-accent-soft);--color-koe-accent-contrast:var(--koe-accent-contrast);--color-koe-border:var(--koe-border);--color-koe-border-strong:var(--koe-border-strong);--color-koe-danger:var(--koe-danger);--color-koe-danger-soft:var(--koe-danger-soft);--color-koe-danger-border:var(--koe-danger-border);--color-koe-danger-contrast:var(--koe-danger-contrast);--color-koe-gif-from:var(--koe-gif-from);--color-koe-gif-to:var(--koe-gif-to);--radius-full:var(--koe-radius-full)}}@layer base{*,:after,:before,::backdrop{box-sizing:border-box;border:0 solid;margin:0;padding:0}::file-selector-button{box-sizing:border-box;border:0 solid;margin:0;padding:0}html,:host{-webkit-text-size-adjust:100%;tab-size:4;line-height:1.5;font-family:var(--default-font-family,-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "Noto Sans", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji");font-feature-settings:var(--default-font-feature-settings,normal);font-variation-settings:var(--default-font-variation-settings,normal);-webkit-tap-highlight-color:transparent}hr{height:0;color:inherit;border-top-width:1px}abbr:where([title]){-webkit-text-decoration:underline dotted;text-decoration:underline dotted}h1,h2,h3,h4,h5,h6{font-size:inherit;font-weight:inherit}a{color:inherit;-webkit-text-decoration:inherit;-webkit-text-decoration:inherit;-webkit-text-decoration:inherit;text-decoration:inherit}b,strong{font-weight:bolder}code,kbd,samp,pre{font-family:var(--default-mono-font-family,ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace);font-feature-settings:var(--default-mono-font-feature-settings,normal);font-variation-settings:var(--default-mono-font-variation-settings,normal);font-size:1em}small{font-size:80%}sub,sup{vertical-align:baseline;font-size:75%;line-height:0;position:relative}sub{bottom:-.25em}sup{top:-.5em}table{text-indent:0;border-color:inherit;border-collapse:collapse}:-moz-focusring:where(:not(iframe)){outline:auto}progress{vertical-align:baseline}summary{display:list-item}ol,ul,menu{list-style:none}img,svg,video,canvas,audio,iframe,embed,object{vertical-align:middle;display:block}img,video{max-width:100%;height:auto}button,input,select,optgroup,textarea{font:inherit;font-feature-settings:inherit;font-variation-settings:inherit;letter-spacing:inherit;color:inherit;opacity:1;background-color:#0000;border-radius:0}::file-selector-button{font:inherit;font-feature-settings:inherit;font-variation-settings:inherit;letter-spacing:inherit;color:inherit;opacity:1;background-color:#0000;border-radius:0}:where(select:is([multiple],[size])) optgroup{font-weight:bolder}:where(select:is([multiple],[size])) optgroup option{padding-inline-start:20px}::file-selector-button{margin-inline-end:4px}::placeholder{opacity:1}@supports (not ((-webkit-appearance:-apple-pay-button))) or (contain-intrinsic-size:1px){::placeholder{color:currentColor}@supports (color:color-mix(in lab, red, red)){::placeholder{color:color-mix(in oklab, currentcolor 50%, transparent)}}}textarea{resize:vertical}::-webkit-search-decoration{-webkit-appearance:none}::-webkit-date-and-time-value{min-height:1lh;text-align:inherit}::-webkit-datetime-edit{display:inline-flex}::-webkit-datetime-edit-fields-wrapper{padding:0}::-webkit-datetime-edit{padding-block:0}::-webkit-datetime-edit-year-field{padding-block:0}::-webkit-datetime-edit-month-field{padding-block:0}::-webkit-datetime-edit-day-field{padding-block:0}::-webkit-datetime-edit-hour-field{padding-block:0}::-webkit-datetime-edit-minute-field{padding-block:0}::-webkit-datetime-edit-second-field{padding-block:0}::-webkit-datetime-edit-millisecond-field{padding-block:0}::-webkit-datetime-edit-meridiem-field{padding-block:0}::-webkit-calendar-picker-indicator{line-height:1}:-moz-ui-invalid{box-shadow:none}button,input:where([type=button],[type=reset],[type=submit]){appearance:button}::file-selector-button{appearance:button}::-webkit-inner-spin-button{height:auto}::-webkit-outer-spin-button{height:auto}[hidden]:where(:not([hidden=until-found])){display:none!important}}@layer components{:host{--koe-font:system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;--koe-font-mono:ui-monospace, SFMono-Regular, Menlo, monospace;--koe-space:.25rem;--koe-radius-sm:.25rem;--koe-radius-md:.375rem;--koe-radius-lg:.5rem;--koe-radius-xl:.75rem;--koe-radius-2xl:1rem;--koe-radius-full:9999px;--koe-surface:#fff;--koe-surface-muted:#f8fafc;--koe-surface-sunken:#f1f5f9;--koe-surface-strong:#0f172a;--koe-skeleton:#e2e8f0;--koe-text:#0f172a;--koe-text-muted:#64748b;--koe-text-subtle:#94a3b8;--koe-text-inverse:#fff;--koe-accent:#2563eb;--koe-accent-soft:#eff6ff;--koe-accent-contrast:#fff;--koe-border:#e2e8f0;--koe-border-strong:#cbd5e1;--koe-focus-ring:#0f172a14;--koe-danger:#dc2626;--koe-danger-soft:#fef2f2;--koe-danger-border:#fecaca;--koe-danger-contrast:#fff;--koe-warning:#92400e;--koe-warning-soft:#fef3c7;--koe-gif-from:#d946ef;--koe-gif-to:#ec4899;--koe-thread-line-0:#e5e7eb;--koe-thread-line-1:#bae6fd;--koe-thread-line-2:#ddd6fe;--koe-thread-line-3:#a7f3d0;font-family:var(--koe-font);color:var(--koe-text);display:block}:host([theme=dark]){--koe-surface:#0f172a;--koe-surface-muted:#1e293b;--koe-surface-sunken:#1e293b;--koe-surface-strong:#f8fafc;--koe-skeleton:#1e293b;--koe-text:#e2e8f0;--koe-text-muted:#94a3b8;--koe-text-subtle:#64748b;--koe-text-inverse:#0f172a;--koe-accent:#60a5fa;--koe-accent-soft:#2563eb2e;--koe-accent-contrast:#fff;--koe-border:#1e293b;--koe-border-strong:#475569;--koe-focus-ring:#ffffff0f;--koe-danger:#f87171;--koe-danger-soft:#dc26262e;--koe-danger-border:#dc262680;--koe-danger-contrast:#fff;--koe-warning:#fcd34d;--koe-warning-soft:#fbbf241f;--koe-thread-line-0:#334155;--koe-thread-line-1:#075985;--koe-thread-line-2:#5b21b6;--koe-thread-line-3:#065f46;color:var(--koe-text)}.comment-list{margin:0;padding:0;list-style:none}.comment-list--root>.comment+.comment{margin-top:calc(var(--koe-space) * 6);padding-top:calc(var(--koe-space) * 6);border-top:1px solid var(--koe-border)}.thread-line{border-left-style:solid;border-left-width:2px}.comment-body>:first-child{margin-top:0}.comment-body>:last-child{margin-bottom:0}.comment-body img{border-radius:var(--koe-radius-xl);max-width:min(320px,100%);height:auto;margin:var(--koe-space) 0;display:inline-block}.pending-badge{padding:1px calc(var(--koe-space) * 2);border-radius:var(--koe-radius-full);color:var(--koe-warning);background-color:var(--koe-warning-soft);white-space:nowrap;align-items:center;font-size:.7rem;font-weight:500;display:inline-flex}.toolbar-button{width:calc(var(--koe-space) * 8);height:calc(var(--koe-space) * 8);border-radius:var(--koe-radius-lg);color:var(--koe-text-muted);justify-content:center;align-items:center;transition:background-color .15s,color .15s;display:inline-flex}.toolbar-button:hover{background-color:var(--koe-surface-sunken);color:var(--koe-text)}}@layer utilities{.absolute{position:absolute}.relative{position:relative}.static{position:static}.top-full{top:100%}.right-2{right:calc(var(--spacing) * 2)}.z-20{z-index:20}.col-span-3{grid-column:span 3/span 3}.mx-1{margin-inline:var(--spacing)}.prose{color:var(--tw-prose-body);max-width:65ch}.prose :where(p):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:1.25em;margin-bottom:1.25em}.prose :where([class~=lead]):not(:where([class~=not-prose],[class~=not-prose] *)){color:var(--tw-prose-lead);margin-top:1.2em;margin-bottom:1.2em;font-size:1.25em;line-height:1.6}.prose :where(a):not(:where([class~=not-prose],[class~=not-prose] *)){color:var(--tw-prose-links);font-weight:500;text-decoration:underline}.prose :where(strong):not(:where([class~=not-prose],[class~=not-prose] *)){color:var(--tw-prose-bold);font-weight:600}.prose :where(a strong):not(:where([class~=not-prose],[class~=not-prose] *)),.prose :where(blockquote strong):not(:where([class~=not-prose],[class~=not-prose] *)),.prose :where(thead th strong):not(:where([class~=not-prose],[class~=not-prose] *)){color:inherit}.prose :where(ol):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:1.25em;margin-bottom:1.25em;padding-inline-start:1.625em;list-style-type:decimal}.prose :where(ol[type=A]):not(:where([class~=not-prose],[class~=not-prose] *)){list-style-type:upper-alpha}.prose :where(ol[type=a]):not(:where([class~=not-prose],[class~=not-prose] *)){list-style-type:lower-alpha}.prose :where(ol[type=A s]):not(:where([class~=not-prose],[class~=not-prose] *)){list-style-type:upper-alpha}.prose :where(ol[type=a s]):not(:where([class~=not-prose],[class~=not-prose] *)){list-style-type:lower-alpha}.prose :where(ol[type=I]):not(:where([class~=not-prose],[class~=not-prose] *)){list-style-type:upper-roman}.prose :where(ol[type=i]):not(:where([class~=not-prose],[class~=not-prose] *)){list-style-type:lower-roman}.prose :where(ol[type=I s]):not(:where([class~=not-prose],[class~=not-prose] *)){list-style-type:upper-roman}.prose :where(ol[type=i s]):not(:where([class~=not-prose],[class~=not-prose] *)){list-style-type:lower-roman}.prose :where(ol[type="1"]):not(:where([class~=not-prose],[class~=not-prose] *)){list-style-type:decimal}.prose :where(ul):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:1.25em;margin-bottom:1.25em;padding-inline-start:1.625em;list-style-type:disc}.prose :where(ol>li):not(:where([class~=not-prose],[class~=not-prose] *))::marker{color:var(--tw-prose-counters);font-weight:400}.prose :where(ul>li):not(:where([class~=not-prose],[class~=not-prose] *))::marker{color:var(--tw-prose-bullets)}.prose :where(dt):not(:where([class~=not-prose],[class~=not-prose] *)){color:var(--tw-prose-headings);margin-top:1.25em;font-weight:600}.prose :where(hr):not(:where([class~=not-prose],[class~=not-prose] *)){border-color:var(--tw-prose-hr);border-top-width:1px;margin-top:3em;margin-bottom:3em}.prose :where(blockquote):not(:where([class~=not-prose],[class~=not-prose] *)){color:var(--tw-prose-quotes);border-inline-start-width:.25rem;border-inline-start-color:var(--tw-prose-quote-borders);quotes:"“""”""‘""’";margin-top:1.6em;margin-bottom:1.6em;padding-inline-start:1em;font-style:italic;font-weight:500}.prose :where(blockquote p:first-of-type):not(:where([class~=not-prose],[class~=not-prose] *)):before{content:open-quote}.prose :where(blockquote p:last-of-type):not(:where([class~=not-prose],[class~=not-prose] *)):after{content:close-quote}.prose :where(h1):not(:where([class~=not-prose],[class~=not-prose] *)){color:var(--tw-prose-headings);margin-top:0;margin-bottom:.888889em;font-size:2.25em;font-weight:800;line-height:1.11111}.prose :where(h1 strong):not(:where([class~=not-prose],[class~=not-prose] *)){color:inherit;font-weight:900}.prose :where(h2):not(:where([class~=not-prose],[class~=not-prose] *)){color:var(--tw-prose-headings);margin-top:2em;margin-bottom:1em;font-size:1.5em;font-weight:700;line-height:1.33333}.prose :where(h2 strong):not(:where([class~=not-prose],[class~=not-prose] *)){color:inherit;font-weight:800}.prose :where(h3):not(:where([class~=not-prose],[class~=not-prose] *)){color:var(--tw-prose-headings);margin-top:1.6em;margin-bottom:.6em;font-size:1.25em;font-weight:600;line-height:1.6}.prose :where(h3 strong):not(:where([class~=not-prose],[class~=not-prose] *)){color:inherit;font-weight:700}.prose :where(h4):not(:where([class~=not-prose],[class~=not-prose] *)){color:var(--tw-prose-headings);margin-top:1.5em;margin-bottom:.5em;font-weight:600;line-height:1.5}.prose :where(h4 strong):not(:where([class~=not-prose],[class~=not-prose] *)){color:inherit;font-weight:700}.prose :where(img):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:2em;margin-bottom:2em}.prose :where(picture):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:2em;margin-bottom:2em;display:block}.prose :where(video):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:2em;margin-bottom:2em}.prose :where(kbd):not(:where([class~=not-prose],[class~=not-prose] *)){color:var(--tw-prose-kbd);box-shadow:0 0 0 1px var(--tw-prose-kbd-shadows), 0 3px 0 var(--tw-prose-kbd-shadows);padding-top:.1875em;padding-inline-end:.375em;padding-bottom:.1875em;border-radius:.3125rem;padding-inline-start:.375em;font-family:inherit;font-size:.875em;font-weight:500}.prose :where(code):not(:where([class~=not-prose],[class~=not-prose] *)){color:var(--tw-prose-code);font-size:.875em;font-weight:600}.prose :where(code):not(:where([class~=not-prose],[class~=not-prose] *)):before,.prose :where(code):not(:where([class~=not-prose],[class~=not-prose] *)):after{content:"\`"}.prose :where(a code):not(:where([class~=not-prose],[class~=not-prose] *)),.prose :where(h1 code):not(:where([class~=not-prose],[class~=not-prose] *)){color:inherit}.prose :where(h2 code):not(:where([class~=not-prose],[class~=not-prose] *)){color:inherit;font-size:.875em}.prose :where(h3 code):not(:where([class~=not-prose],[class~=not-prose] *)){color:inherit;font-size:.9em}.prose :where(h4 code):not(:where([class~=not-prose],[class~=not-prose] *)),.prose :where(blockquote code):not(:where([class~=not-prose],[class~=not-prose] *)),.prose :where(thead th code):not(:where([class~=not-prose],[class~=not-prose] *)){color:inherit}.prose :where(pre):not(:where([class~=not-prose],[class~=not-prose] *)){color:var(--tw-prose-pre-code);background-color:var(--tw-prose-pre-bg);padding-top:.857143em;padding-inline-end:1.14286em;padding-bottom:.857143em;border-radius:.375rem;margin-top:1.71429em;margin-bottom:1.71429em;padding-inline-start:1.14286em;font-size:.875em;font-weight:400;line-height:1.71429;overflow-x:auto}.prose :where(pre code):not(:where([class~=not-prose],[class~=not-prose] *)){font-weight:inherit;color:inherit;font-size:inherit;font-family:inherit;line-height:inherit;background-color:#0000;border-width:0;border-radius:0;padding:0}.prose :where(pre code):not(:where([class~=not-prose],[class~=not-prose] *)):before,.prose :where(pre code):not(:where([class~=not-prose],[class~=not-prose] *)):after{content:none}.prose :where(table):not(:where([class~=not-prose],[class~=not-prose] *)){table-layout:auto;width:100%;margin-top:2em;margin-bottom:2em;font-size:.875em;line-height:1.71429}.prose :where(thead):not(:where([class~=not-prose],[class~=not-prose] *)){border-bottom-width:1px;border-bottom-color:var(--tw-prose-th-borders)}.prose :where(thead th):not(:where([class~=not-prose],[class~=not-prose] *)){color:var(--tw-prose-headings);vertical-align:bottom;padding-inline-end:.571429em;padding-bottom:.571429em;padding-inline-start:.571429em;font-weight:600}.prose :where(tbody tr):not(:where([class~=not-prose],[class~=not-prose] *)){border-bottom-width:1px;border-bottom-color:var(--tw-prose-td-borders)}.prose :where(tbody tr:last-child):not(:where([class~=not-prose],[class~=not-prose] *)){border-bottom-width:0}.prose :where(tbody td):not(:where([class~=not-prose],[class~=not-prose] *)){vertical-align:baseline}.prose :where(tfoot):not(:where([class~=not-prose],[class~=not-prose] *)){border-top-width:1px;border-top-color:var(--tw-prose-th-borders)}.prose :where(tfoot td):not(:where([class~=not-prose],[class~=not-prose] *)){vertical-align:top}.prose :where(th,td):not(:where([class~=not-prose],[class~=not-prose] *)){text-align:start}.prose :where(figure>*):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:0;margin-bottom:0}.prose :where(figcaption):not(:where([class~=not-prose],[class~=not-prose] *)){color:var(--tw-prose-captions);margin-top:.857143em;font-size:.875em;line-height:1.42857}.prose{--tw-prose-body:oklch(37.3% .034 259.733);--tw-prose-headings:oklch(21% .034 264.665);--tw-prose-lead:oklch(44.6% .03 256.802);--tw-prose-links:oklch(21% .034 264.665);--tw-prose-bold:oklch(21% .034 264.665);--tw-prose-counters:oklch(55.1% .027 264.364);--tw-prose-bullets:oklch(87.2% .01 258.338);--tw-prose-hr:oklch(92.8% .006 264.531);--tw-prose-quotes:oklch(21% .034 264.665);--tw-prose-quote-borders:oklch(92.8% .006 264.531);--tw-prose-captions:oklch(55.1% .027 264.364);--tw-prose-kbd:oklch(21% .034 264.665);--tw-prose-kbd-shadows:oklab(21% -.00316127 -.0338527/.1);--tw-prose-code:oklch(21% .034 264.665);--tw-prose-pre-code:oklch(92.8% .006 264.531);--tw-prose-pre-bg:oklch(27.8% .033 256.848);--tw-prose-th-borders:oklch(87.2% .01 258.338);--tw-prose-td-borders:oklch(92.8% .006 264.531);--tw-prose-invert-body:oklch(87.2% .01 258.338);--tw-prose-invert-headings:#fff;--tw-prose-invert-lead:oklch(70.7% .022 261.325);--tw-prose-invert-links:#fff;--tw-prose-invert-bold:#fff;--tw-prose-invert-counters:oklch(70.7% .022 261.325);--tw-prose-invert-bullets:oklch(44.6% .03 256.802);--tw-prose-invert-hr:oklch(37.3% .034 259.733);--tw-prose-invert-quotes:oklch(96.7% .003 264.542);--tw-prose-invert-quote-borders:oklch(37.3% .034 259.733);--tw-prose-invert-captions:oklch(70.7% .022 261.325);--tw-prose-invert-kbd:#fff;--tw-prose-invert-kbd-shadows:#ffffff1a;--tw-prose-invert-code:#fff;--tw-prose-invert-pre-code:oklch(87.2% .01 258.338);--tw-prose-invert-pre-bg:#00000080;--tw-prose-invert-th-borders:oklch(44.6% .03 256.802);--tw-prose-invert-td-borders:oklch(37.3% .034 259.733);font-size:1rem;line-height:1.75}.prose :where(picture>img):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:0;margin-bottom:0}.prose :where(li):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:.5em;margin-bottom:.5em}.prose :where(ol>li):not(:where([class~=not-prose],[class~=not-prose] *)),.prose :where(ul>li):not(:where([class~=not-prose],[class~=not-prose] *)){padding-inline-start:.375em}.prose :where(.prose>ul>li p):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:.75em;margin-bottom:.75em}.prose :where(.prose>ul>li>p:first-child):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:1.25em}.prose :where(.prose>ul>li>p:last-child):not(:where([class~=not-prose],[class~=not-prose] *)){margin-bottom:1.25em}.prose :where(.prose>ol>li>p:first-child):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:1.25em}.prose :where(.prose>ol>li>p:last-child):not(:where([class~=not-prose],[class~=not-prose] *)){margin-bottom:1.25em}.prose :where(ul ul,ul ol,ol ul,ol ol):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:.75em;margin-bottom:.75em}.prose :where(dl):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:1.25em;margin-bottom:1.25em}.prose :where(dd):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:.5em;padding-inline-start:1.625em}.prose :where(hr+*):not(:where([class~=not-prose],[class~=not-prose] *)),.prose :where(h2+*):not(:where([class~=not-prose],[class~=not-prose] *)),.prose :where(h3+*):not(:where([class~=not-prose],[class~=not-prose] *)),.prose :where(h4+*):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:0}.prose :where(thead th:first-child):not(:where([class~=not-prose],[class~=not-prose] *)){padding-inline-start:0}.prose :where(thead th:last-child):not(:where([class~=not-prose],[class~=not-prose] *)){padding-inline-end:0}.prose :where(tbody td,tfoot td):not(:where([class~=not-prose],[class~=not-prose] *)){padding-top:.571429em;padding-inline-end:.571429em;padding-bottom:.571429em;padding-inline-start:.571429em}.prose :where(tbody td:first-child,tfoot td:first-child):not(:where([class~=not-prose],[class~=not-prose] *)){padding-inline-start:0}.prose :where(tbody td:last-child,tfoot td:last-child):not(:where([class~=not-prose],[class~=not-prose] *)){padding-inline-end:0}.prose :where(figure):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:2em;margin-bottom:2em}.prose :where(.prose>:first-child):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:0}.prose :where(.prose>:last-child):not(:where([class~=not-prose],[class~=not-prose] *)){margin-bottom:0}.prose-sm{font-size:.875rem;line-height:1.71429}.prose-sm :where(p):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:1.14286em;margin-bottom:1.14286em}.prose-sm :where([class~=lead]):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:.888889em;margin-bottom:.888889em;font-size:1.28571em;line-height:1.55556}.prose-sm :where(blockquote):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:1.33333em;margin-bottom:1.33333em;padding-inline-start:1.11111em}.prose-sm :where(h1):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:0;margin-bottom:.8em;font-size:2.14286em;line-height:1.2}.prose-sm :where(h2):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:1.6em;margin-bottom:.8em;font-size:1.42857em;line-height:1.4}.prose-sm :where(h3):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:1.55556em;margin-bottom:.444444em;font-size:1.28571em;line-height:1.55556}.prose-sm :where(h4):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:1.42857em;margin-bottom:.571429em;line-height:1.42857}.prose-sm :where(img):not(:where([class~=not-prose],[class~=not-prose] *)),.prose-sm :where(picture):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:1.71429em;margin-bottom:1.71429em}.prose-sm :where(picture>img):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:0;margin-bottom:0}.prose-sm :where(video):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:1.71429em;margin-bottom:1.71429em}.prose-sm :where(kbd):not(:where([class~=not-prose],[class~=not-prose] *)){padding-top:.142857em;padding-inline-end:.357143em;padding-bottom:.142857em;border-radius:.3125rem;padding-inline-start:.357143em;font-size:.857143em}.prose-sm :where(code):not(:where([class~=not-prose],[class~=not-prose] *)){font-size:.857143em}.prose-sm :where(h2 code):not(:where([class~=not-prose],[class~=not-prose] *)){font-size:.9em}.prose-sm :where(h3 code):not(:where([class~=not-prose],[class~=not-prose] *)){font-size:.888889em}.prose-sm :where(pre):not(:where([class~=not-prose],[class~=not-prose] *)){padding-top:.666667em;padding-inline-end:1em;padding-bottom:.666667em;border-radius:.25rem;margin-top:1.66667em;margin-bottom:1.66667em;padding-inline-start:1em;font-size:.857143em;line-height:1.66667}.prose-sm :where(ol):not(:where([class~=not-prose],[class~=not-prose] *)),.prose-sm :where(ul):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:1.14286em;margin-bottom:1.14286em;padding-inline-start:1.57143em}.prose-sm :where(li):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:.285714em;margin-bottom:.285714em}.prose-sm :where(ol>li):not(:where([class~=not-prose],[class~=not-prose] *)),.prose-sm :where(ul>li):not(:where([class~=not-prose],[class~=not-prose] *)){padding-inline-start:.428571em}.prose-sm :where(.prose-sm>ul>li p):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:.571429em;margin-bottom:.571429em}.prose-sm :where(.prose-sm>ul>li>p:first-child):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:1.14286em}.prose-sm :where(.prose-sm>ul>li>p:last-child):not(:where([class~=not-prose],[class~=not-prose] *)){margin-bottom:1.14286em}.prose-sm :where(.prose-sm>ol>li>p:first-child):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:1.14286em}.prose-sm :where(.prose-sm>ol>li>p:last-child):not(:where([class~=not-prose],[class~=not-prose] *)){margin-bottom:1.14286em}.prose-sm :where(ul ul,ul ol,ol ul,ol ol):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:.571429em;margin-bottom:.571429em}.prose-sm :where(dl):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:1.14286em;margin-bottom:1.14286em}.prose-sm :where(dt):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:1.14286em}.prose-sm :where(dd):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:.285714em;padding-inline-start:1.57143em}.prose-sm :where(hr):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:2.85714em;margin-bottom:2.85714em}.prose-sm :where(hr+*):not(:where([class~=not-prose],[class~=not-prose] *)),.prose-sm :where(h2+*):not(:where([class~=not-prose],[class~=not-prose] *)),.prose-sm :where(h3+*):not(:where([class~=not-prose],[class~=not-prose] *)),.prose-sm :where(h4+*):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:0}.prose-sm :where(table):not(:where([class~=not-prose],[class~=not-prose] *)){font-size:.857143em;line-height:1.5}.prose-sm :where(thead th):not(:where([class~=not-prose],[class~=not-prose] *)){padding-inline-end:1em;padding-bottom:.666667em;padding-inline-start:1em}.prose-sm :where(thead th:first-child):not(:where([class~=not-prose],[class~=not-prose] *)){padding-inline-start:0}.prose-sm :where(thead th:last-child):not(:where([class~=not-prose],[class~=not-prose] *)){padding-inline-end:0}.prose-sm :where(tbody td,tfoot td):not(:where([class~=not-prose],[class~=not-prose] *)){padding-top:.666667em;padding-inline-end:1em;padding-bottom:.666667em;padding-inline-start:1em}.prose-sm :where(tbody td:first-child,tfoot td:first-child):not(:where([class~=not-prose],[class~=not-prose] *)){padding-inline-start:0}.prose-sm :where(tbody td:last-child,tfoot td:last-child):not(:where([class~=not-prose],[class~=not-prose] *)){padding-inline-end:0}.prose-sm :where(figure):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:1.71429em;margin-bottom:1.71429em}.prose-sm :where(figure>*):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:0;margin-bottom:0}.prose-sm :where(figcaption):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:.666667em;font-size:.857143em;line-height:1.33333}.prose-sm :where(.prose-sm>:first-child):not(:where([class~=not-prose],[class~=not-prose] *)){margin-top:0}.prose-sm :where(.prose-sm>:last-child):not(:where([class~=not-prose],[class~=not-prose] *)){margin-bottom:0}.mt-1{margin-top:var(--spacing)}.mt-1\\.5{margin-top:calc(var(--spacing) * 1.5)}.mt-2{margin-top:calc(var(--spacing) * 2)}.mt-2\\.5{margin-top:calc(var(--spacing) * 2.5)}.mt-3{margin-top:calc(var(--spacing) * 3)}.mb-1{margin-bottom:var(--spacing)}.mb-1\\.5{margin-bottom:calc(var(--spacing) * 1.5)}.mb-2{margin-bottom:calc(var(--spacing) * 2)}.mb-3{margin-bottom:calc(var(--spacing) * 3)}.mb-4{margin-bottom:calc(var(--spacing) * 4)}.mb-5{margin-bottom:calc(var(--spacing) * 5)}.mb-8{margin-bottom:calc(var(--spacing) * 8)}.ml-2{margin-left:calc(var(--spacing) * 2)}.ml-auto{margin-left:auto}.block{display:block}.flex{display:flex}.grid{display:grid}.hidden{display:none}.inline{display:inline}.inline-flex{display:inline-flex}.\\!h-6{height:calc(var(--spacing) * 6)!important}.h-3{height:calc(var(--spacing) * 3)}.h-4{height:calc(var(--spacing) * 4)}.h-5{height:calc(var(--spacing) * 5)}.h-8{height:calc(var(--spacing) * 8)}.h-9{height:calc(var(--spacing) * 9)}.h-20{height:calc(var(--spacing) * 20)}.h-\\[18px\\]{height:18px}.max-h-56{max-height:calc(var(--spacing) * 56)}.\\!w-6{width:calc(var(--spacing) * 6)!important}.w-1\\/4{width:25%}.w-3\\/4{width:75%}.w-4{width:calc(var(--spacing) * 4)}.w-8{width:calc(var(--spacing) * 8)}.w-9{width:calc(var(--spacing) * 9)}.w-16{width:calc(var(--spacing) * 16)}.w-80{width:calc(var(--spacing) * 80)}.w-\\[18px\\]{width:18px}.w-full{width:100%}.w-px{width:1px}.max-w-\\[calc\\(100vw-4rem\\)\\]{max-width:calc(100vw - 4rem)}.max-w-none{max-width:none}.min-w-0{min-width:0}.min-w-6{min-width:calc(var(--spacing) * 6)}.flex-1{flex:1}.shrink-0{flex-shrink:0}.animate-pulse{animation:var(--animate-pulse)}.cursor-pointer{cursor:pointer}.resize-y{resize:vertical}.grid-cols-3{grid-template-columns:repeat(3,minmax(0,1fr))}.flex-wrap{flex-wrap:wrap}.items-baseline{align-items:baseline}.items-center{align-items:center}.justify-between{justify-content:space-between}.justify-center{justify-content:center}.justify-end{justify-content:flex-end}.gap-0\\.5{gap:calc(var(--spacing) * .5)}.gap-1{gap:var(--spacing)}.gap-1\\.5{gap:calc(var(--spacing) * 1.5)}.gap-2{gap:calc(var(--spacing) * 2)}.gap-3{gap:calc(var(--spacing) * 3)}:where(.space-y-2>:not(:last-child)){--tw-space-y-reverse:0;margin-block-start:calc(calc(var(--spacing) * 2) * var(--tw-space-y-reverse));margin-block-end:calc(calc(var(--spacing) * 2) * calc(1 - var(--tw-space-y-reverse)))}:where(.space-y-3>:not(:last-child)){--tw-space-y-reverse:0;margin-block-start:calc(calc(var(--spacing) * 3) * var(--tw-space-y-reverse));margin-block-end:calc(calc(var(--spacing) * 3) * calc(1 - var(--tw-space-y-reverse)))}:where(.space-y-5>:not(:last-child)){--tw-space-y-reverse:0;margin-block-start:calc(calc(var(--spacing) * 5) * var(--tw-space-y-reverse));margin-block-end:calc(calc(var(--spacing) * 5) * calc(1 - var(--tw-space-y-reverse)))}.gap-x-2{column-gap:calc(var(--spacing) * 2)}.gap-y-0\\.5{row-gap:calc(var(--spacing) * .5)}.overflow-hidden{overflow:hidden}.overflow-y-auto{overflow-y:auto}.rounded-2xl{border-radius:var(--radius-2xl)}.rounded-full{border-radius:var(--radius-full)}.rounded-lg{border-radius:var(--radius-lg)}.rounded-md{border-radius:var(--radius-md)}.rounded-xl{border-radius:var(--radius-xl)}.border{border-style:var(--tw-border-style);border-width:1px}.border-0{border-style:var(--tw-border-style);border-width:0}.border-b{border-bottom-style:var(--tw-border-style);border-bottom-width:1px}.border-dashed{--tw-border-style:dashed;border-style:dashed}.border-koe-border{border-color:var(--color-koe-border)}.border-koe-border-strong{border-color:var(--color-koe-border-strong)}.border-koe-danger-border{border-color:var(--color-koe-danger-border)}.bg-koe-border{background-color:var(--color-koe-border)}.bg-koe-danger{background-color:var(--color-koe-danger)}.bg-koe-danger-soft{background-color:var(--color-koe-danger-soft)}.bg-koe-skeleton{background-color:var(--color-koe-skeleton)}.bg-koe-surface{background-color:var(--color-koe-surface)}.bg-koe-surface-muted{background-color:var(--color-koe-surface-muted)}.bg-koe-surface-strong{background-color:var(--color-koe-surface-strong)}.bg-koe-surface-sunken{background-color:var(--color-koe-surface-sunken)}.bg-transparent{background-color:#0000}.bg-gradient-to-br{--tw-gradient-position:to bottom right in oklab;background-image:linear-gradient(var(--tw-gradient-stops))}.bg-gradient-to-r{--tw-gradient-position:to right in oklab;background-image:linear-gradient(var(--tw-gradient-stops))}.from-koe-gif-from{--tw-gradient-from:var(--color-koe-gif-from);--tw-gradient-stops:var(--tw-gradient-via-stops,var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position))}.from-koe-surface-muted{--tw-gradient-from:var(--color-koe-surface-muted);--tw-gradient-stops:var(--tw-gradient-via-stops,var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position))}.to-koe-gif-to{--tw-gradient-to:var(--color-koe-gif-to);--tw-gradient-stops:var(--tw-gradient-via-stops,var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position))}.to-koe-skeleton{--tw-gradient-to:var(--color-koe-skeleton);--tw-gradient-stops:var(--tw-gradient-via-stops,var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position))}.object-cover{object-fit:cover}.p-1\\.5{padding:calc(var(--spacing) * 1.5)}.p-3{padding:calc(var(--spacing) * 3)}.px-1\\.5{padding-inline:calc(var(--spacing) * 1.5)}.px-2{padding-inline:calc(var(--spacing) * 2)}.px-2\\.5{padding-inline:calc(var(--spacing) * 2.5)}.px-3{padding-inline:calc(var(--spacing) * 3)}.px-4{padding-inline:calc(var(--spacing) * 4)}.px-6{padding-inline:calc(var(--spacing) * 6)}.py-0\\.5{padding-block:calc(var(--spacing) * .5)}.py-1{padding-block:var(--spacing)}.py-1\\.5{padding-block:calc(var(--spacing) * 1.5)}.py-2{padding-block:calc(var(--spacing) * 2)}.py-3{padding-block:calc(var(--spacing) * 3)}.py-6{padding-block:calc(var(--spacing) * 6)}.py-12{padding-block:calc(var(--spacing) * 12)}.pt-1{padding-top:var(--spacing)}.pb-3{padding-bottom:calc(var(--spacing) * 3)}.pl-4{padding-left:calc(var(--spacing) * 4)}.text-center{text-align:center}.font-mono{font-family:var(--font-mono)}.font-sans{font-family:var(--font-sans)}.font-serif{font-family:var(--font-serif)}.text-3xl{font-size:var(--text-3xl);line-height:var(--tw-leading,var(--text-3xl--line-height))}.text-base{font-size:var(--text-base);line-height:var(--tw-leading,var(--text-base--line-height))}.text-lg{font-size:var(--text-lg);line-height:var(--tw-leading,var(--text-lg--line-height))}.text-sm{font-size:var(--text-sm);line-height:var(--tw-leading,var(--text-sm--line-height))}.text-xl{font-size:var(--text-xl);line-height:var(--tw-leading,var(--text-xl--line-height))}.text-xs{font-size:var(--text-xs);line-height:var(--tw-leading,var(--text-xs--line-height))}.text-\\[10px\\]{font-size:10px}.leading-none{--tw-leading:1;line-height:1}.leading-relaxed{--tw-leading:var(--leading-relaxed);line-height:var(--leading-relaxed)}.font-bold{--tw-font-weight:var(--font-weight-bold);font-weight:var(--font-weight-bold)}.font-extrabold{--tw-font-weight:var(--font-weight-extrabold);font-weight:var(--font-weight-extrabold)}.font-medium{--tw-font-weight:var(--font-weight-medium);font-weight:var(--font-weight-medium)}.font-semibold{--tw-font-weight:var(--font-weight-semibold);font-weight:var(--font-weight-semibold)}.tracking-tight{--tw-tracking:var(--tracking-tight);letter-spacing:var(--tracking-tight)}.tracking-wide{--tw-tracking:var(--tracking-wide);letter-spacing:var(--tracking-wide)}.text-koe-accent-contrast{color:var(--color-koe-accent-contrast)}.text-koe-border-strong{color:var(--color-koe-border-strong)}.text-koe-danger{color:var(--color-koe-danger)}.text-koe-danger-contrast{color:var(--color-koe-danger-contrast)}.text-koe-text{color:var(--color-koe-text)}.text-koe-text-inverse{color:var(--color-koe-text-inverse)}.text-koe-text-muted{color:var(--color-koe-text-muted)}.text-koe-text-subtle{color:var(--color-koe-text-subtle)}.uppercase{text-transform:uppercase}.italic{font-style:italic}.tabular-nums{--tw-numeric-spacing:tabular-nums;font-variant-numeric:var(--tw-ordinal,) var(--tw-slashed-zero,) var(--tw-numeric-figure,) var(--tw-numeric-spacing,) var(--tw-numeric-fraction,)}.line-through{text-decoration-line:line-through}.antialiased{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}.shadow-lg{--tw-shadow:0 10px 15px -3px var(--tw-shadow-color,#0000001a), 0 4px 6px -4px var(--tw-shadow-color,#0000001a);box-shadow:var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)}.shadow-sm{--tw-shadow:0 1px 3px 0 var(--tw-shadow-color,#0000001a), 0 1px 2px -1px var(--tw-shadow-color,#0000001a);box-shadow:var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)}.shadow-xl{--tw-shadow:0 20px 25px -5px var(--tw-shadow-color,#0000001a), 0 8px 10px -6px var(--tw-shadow-color,#0000001a);box-shadow:var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)}.ring-4{--tw-ring-shadow:var(--tw-ring-inset,) 0 0 0 calc(4px + var(--tw-ring-offset-width)) var(--tw-ring-color,currentcolor);box-shadow:var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)}.ring-\\[var\\(--koe-focus-ring\\)\\]{--tw-ring-color:var(--koe-focus-ring)}.backdrop-blur-sm{--tw-backdrop-blur:blur(var(--blur-sm));-webkit-backdrop-filter:var(--tw-backdrop-blur,) var(--tw-backdrop-brightness,) var(--tw-backdrop-contrast,) var(--tw-backdrop-grayscale,) var(--tw-backdrop-hue-rotate,) var(--tw-backdrop-invert,) var(--tw-backdrop-opacity,) var(--tw-backdrop-saturate,) var(--tw-backdrop-sepia,);backdrop-filter:var(--tw-backdrop-blur,) var(--tw-backdrop-brightness,) var(--tw-backdrop-contrast,) var(--tw-backdrop-grayscale,) var(--tw-backdrop-hue-rotate,) var(--tw-backdrop-invert,) var(--tw-backdrop-opacity,) var(--tw-backdrop-saturate,) var(--tw-backdrop-sepia,)}.transition-all{transition-property:all;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration))}.transition-colors{transition-property:color,background-color,border-color,outline-color,text-decoration-color,fill,stroke,--tw-gradient-from,--tw-gradient-via,--tw-gradient-to;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration))}.transition-opacity{transition-property:opacity;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration))}.duration-200{--tw-duration:.2s;transition-duration:.2s}.select-none{-webkit-user-select:none;user-select:none}.placeholder\\:text-koe-text-subtle::placeholder{color:var(--color-koe-text-subtle)}@media (hover:hover){.hover\\:rotate-12:hover{rotate:12deg}.hover\\:border-koe-border-strong:hover{border-color:var(--color-koe-border-strong)}.hover\\:bg-koe-surface-sunken:hover{background-color:var(--color-koe-surface-sunken)}.hover\\:text-koe-accent:hover{color:var(--color-koe-accent)}.hover\\:text-koe-danger:hover{color:var(--color-koe-danger)}.hover\\:text-koe-text:hover{color:var(--color-koe-text)}.hover\\:text-koe-text-muted:hover{color:var(--color-koe-text-muted)}.hover\\:opacity-75:hover{opacity:.75}.hover\\:opacity-90:hover{opacity:.9}}.focus\\:border-koe-accent:focus{border-color:var(--color-koe-accent)}.focus\\:border-koe-border-strong:focus{border-color:var(--color-koe-border-strong)}.focus\\:outline-none:focus{--tw-outline-style:none;outline-style:none}.focus-visible\\:ring-2:focus-visible{--tw-ring-shadow:var(--tw-ring-inset,) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color,currentcolor);box-shadow:var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)}.focus-visible\\:ring-koe-accent-soft:focus-visible{--tw-ring-color:var(--color-koe-accent-soft)}.focus-visible\\:ring-koe-danger-soft:focus-visible{--tw-ring-color:var(--color-koe-danger-soft)}.disabled\\:cursor-not-allowed:disabled{cursor:not-allowed}.disabled\\:opacity-40:disabled{opacity:.4}.disabled\\:opacity-50:disabled{opacity:.5}.disabled\\:opacity-60:disabled{opacity:.6}@media (min-width:40rem){.sm\\:inline{display:inline}}}@keyframes koe-pop{0%{opacity:0;transform:translateY(4px)scale(.98)}to{opacity:1;transform:none}}.pop-in{animation:.15s ease-out koe-pop}.vote-button.active.up{color:var(--koe-accent);background-color:var(--koe-accent-soft)}.vote-button.active.down{color:var(--koe-danger);background-color:var(--koe-danger-soft)}.reaction-button.active{color:var(--koe-accent);border-color:var(--koe-accent);background-color:var(--koe-accent-soft);font-weight:600}.reaction-button.active .reaction-count{color:var(--koe-accent)}.comment-body{white-space:pre-wrap;word-break:break-word;--tw-prose-body:var(--koe-text);--tw-prose-headings:var(--koe-text);--tw-prose-lead:var(--koe-text-muted);--tw-prose-links:var(--koe-accent);--tw-prose-bold:var(--koe-text);--tw-prose-counters:var(--koe-text-muted);--tw-prose-bullets:var(--koe-border-strong);--tw-prose-hr:var(--koe-border);--tw-prose-quotes:var(--koe-text-muted);--tw-prose-quote-borders:var(--koe-border);--tw-prose-captions:var(--koe-text-muted);--tw-prose-code:var(--koe-text);--tw-prose-pre-code:var(--koe-text);--tw-prose-pre-bg:var(--koe-surface-sunken);--tw-prose-th-borders:var(--koe-border);--tw-prose-td-borders:var(--koe-border)}@property --tw-space-y-reverse{syntax:"*";inherits:false;initial-value:0}@property --tw-border-style{syntax:"*";inherits:false;initial-value:solid}@property --tw-gradient-position{syntax:"*";inherits:false}@property --tw-gradient-from{syntax:"<color>";inherits:false;initial-value:#0000}@property --tw-gradient-via{syntax:"<color>";inherits:false;initial-value:#0000}@property --tw-gradient-to{syntax:"<color>";inherits:false;initial-value:#0000}@property --tw-gradient-stops{syntax:"*";inherits:false}@property --tw-gradient-via-stops{syntax:"*";inherits:false}@property --tw-gradient-from-position{syntax:"<length-percentage>";inherits:false;initial-value:0%}@property --tw-gradient-via-position{syntax:"<length-percentage>";inherits:false;initial-value:50%}@property --tw-gradient-to-position{syntax:"<length-percentage>";inherits:false;initial-value:100%}@property --tw-leading{syntax:"*";inherits:false}@property --tw-font-weight{syntax:"*";inherits:false}@property --tw-tracking{syntax:"*";inherits:false}@property --tw-ordinal{syntax:"*";inherits:false}@property --tw-slashed-zero{syntax:"*";inherits:false}@property --tw-numeric-figure{syntax:"*";inherits:false}@property --tw-numeric-spacing{syntax:"*";inherits:false}@property --tw-numeric-fraction{syntax:"*";inherits:false}@property --tw-shadow{syntax:"*";inherits:false;initial-value:0 0 #0000}@property --tw-shadow-color{syntax:"*";inherits:false}@property --tw-shadow-alpha{syntax:"<percentage>";inherits:false;initial-value:100%}@property --tw-inset-shadow{syntax:"*";inherits:false;initial-value:0 0 #0000}@property --tw-inset-shadow-color{syntax:"*";inherits:false}@property --tw-inset-shadow-alpha{syntax:"<percentage>";inherits:false;initial-value:100%}@property --tw-ring-color{syntax:"*";inherits:false}@property --tw-ring-shadow{syntax:"*";inherits:false;initial-value:0 0 #0000}@property --tw-inset-ring-color{syntax:"*";inherits:false}@property --tw-inset-ring-shadow{syntax:"*";inherits:false;initial-value:0 0 #0000}@property --tw-ring-inset{syntax:"*";inherits:false}@property --tw-ring-offset-width{syntax:"<length>";inherits:false;initial-value:0}@property --tw-ring-offset-color{syntax:"*";inherits:false;initial-value:#fff}@property --tw-ring-offset-shadow{syntax:"*";inherits:false;initial-value:0 0 #0000}@property --tw-backdrop-blur{syntax:"*";inherits:false}@property --tw-backdrop-brightness{syntax:"*";inherits:false}@property --tw-backdrop-contrast{syntax:"*";inherits:false}@property --tw-backdrop-grayscale{syntax:"*";inherits:false}@property --tw-backdrop-hue-rotate{syntax:"*";inherits:false}@property --tw-backdrop-invert{syntax:"*";inherits:false}@property --tw-backdrop-opacity{syntax:"*";inherits:false}@property --tw-backdrop-saturate{syntax:"*";inherits:false}@property --tw-backdrop-sepia{syntax:"*";inherits:false}@property --tw-duration{syntax:"*";inherits:false}@keyframes pulse{50%{opacity:.5}}
 `;
 
 // ../../packages/widget/src/session.ts
 var ACCESS_TOKEN_KEY = "koe_access_token";
-var THEME_KEY = "koe_theme";
 async function ensureGuestSession(client, storage) {
   const stored = storage.getItem(ACCESS_TOKEN_KEY);
   if (stored) {
@@ -5099,14 +5154,6 @@ async function runWithAuthRetry(operation, reauthenticate) {
     }
     throw err;
   }
-}
-function readStoredTheme(storage) {
-  const stored = storage.getItem(THEME_KEY);
-  return stored === "dark" || stored === "light" ? stored : null;
-}
-function detectPreferredTheme() {
-  const prefersDark = typeof window.matchMedia === "function" && window.matchMedia("(prefers-color-scheme: dark)").matches;
-  return prefersDark ? "dark" : "light";
 }
 
 // ../../packages/widget/src/koe-comments.ts
@@ -5187,6 +5234,8 @@ var KoeComments = class extends i4 {
     this.reactionEmojis = "";
     this.gifApiKey = "";
     this.mediaApiKey = "";
+    this.theme = "light";
+    this.showThemeToggle = false;
     this.comments = [];
     this.threadId = "";
     this.loading = true;
@@ -5201,7 +5250,6 @@ var KoeComments = class extends i4 {
     this.collapsedThreads = /* @__PURE__ */ new Set();
     this.openReactionPicker = null;
     this.error = "";
-    this.theme = "light";
     this.activeScope = null;
     this.openGifPicker = null;
     this.gifQuery = "";
@@ -5218,20 +5266,12 @@ var KoeComments = class extends i4 {
     this.token = "";
     this.mediaProvider = null;
     this.gifAbort = null;
-    this.handleExternalThemeChange = (e7) => {
-      const theme = e7.detail?.theme;
-      if (theme === "light" || theme === "dark") {
-        this.theme = theme;
-      }
-    };
   }
   get emojis() {
     return this.reactionEmojis ? this.reactionEmojis.split(",").map((emoji) => emoji.trim()).filter(Boolean) : DEFAULT_EMOJI_ALLOWLIST;
   }
   connectedCallback() {
     super.connectedCallback();
-    this.initTheme();
-    window.addEventListener("koe-theme-change", this.handleExternalThemeChange);
     if (this.threadRef) {
       const effectiveBaseUrl = this.baseUrl || (typeof window !== "undefined" ? window.location.origin : "");
       this.client = createKoeClient({ baseUrl: effectiveBaseUrl });
@@ -5240,10 +5280,6 @@ var KoeComments = class extends i4 {
   }
   disconnectedCallback() {
     super.disconnectedCallback();
-    window.removeEventListener(
-      "koe-theme-change",
-      this.handleExternalThemeChange
-    );
     window.clearTimeout(this.gifDebounce);
     this.gifAbort?.abort();
   }
@@ -5252,18 +5288,8 @@ var KoeComments = class extends i4 {
       this.mediaProvider = this.mediaApiKey ? createImgbbMediaProvider({ apiKey: this.mediaApiKey }) : null;
     }
   }
-  initTheme() {
-    this.theme = readStoredTheme(localStorage) ?? detectPreferredTheme();
-  }
-  setTheme(theme) {
-    this.theme = theme;
-    localStorage.setItem(THEME_KEY, theme);
-    window.dispatchEvent(
-      new CustomEvent("koe-theme-change", { detail: { theme } })
-    );
-  }
   toggleTheme() {
-    this.setTheme(this.theme === "dark" ? "light" : "dark");
+    this.theme = this.theme === "dark" ? "light" : "dark";
   }
   setMediaProvider(provider) {
     this.mediaProvider = provider;
@@ -5720,7 +5746,8 @@ var KoeComments = class extends i4 {
     const emoji = composer ? "\u{1F642}" : avatarEmoji(seed);
     return b2`
       <div
-        class="koe-avatar flex h-9 w-9 shrink-0 select-none items-center justify-center rounded-full border border-slate-200 bg-gradient-to-br from-slate-50 to-slate-200 text-lg leading-none shadow-sm dark:border-slate-700 dark:from-slate-800 dark:to-slate-700"
+        part="avatar"
+        class="koe-avatar flex h-9 w-9 shrink-0 select-none items-center justify-center rounded-full border border-koe-border bg-gradient-to-br from-koe-surface-muted to-koe-skeleton text-lg leading-none shadow-sm"
         aria-hidden="true"
       >
         <span>${emoji}</span>
@@ -5731,40 +5758,52 @@ var KoeComments = class extends i4 {
     const total = this.countAll(this.comments);
     return b2`
       <section
-        class="koe-comments font-sans antialiased ${this.theme === "dark" ? "dark" : ""}"
+        part="root"
+        class="koe-comments font-sans antialiased"
         style="color-scheme: ${this.theme};"
       >
-        <div class="mb-5 flex items-center justify-between gap-3">
-          <h3
-            class="flex items-baseline gap-2 text-xl font-bold tracking-tight text-slate-900 dark:text-white"
-          >
-            Comments
-            ${total > 0 ? b2`<span
-                  class="text-sm font-medium text-slate-400 dark:text-slate-500"
+        <div part="header" class="mb-5 flex items-center justify-between gap-3">
+          <slot name="header">
+            <h3
+              part="title"
+              class="flex items-baseline gap-2 text-xl font-bold tracking-tight text-koe-text"
+            >
+              Comments
+              ${total > 0 ? b2`<span
+                    part="count"
+                    class="text-sm font-medium text-koe-text-subtle"
+                  >
+                    ${total}
+                  </span>` : A}
+            </h3>
+          </slot>
+          ${this.showThemeToggle ? b2`
+                <button
+                  type="button"
+                  part="theme-toggle"
+                  class="theme-toggle inline-flex h-9 w-9 items-center justify-center rounded-full border border-koe-border bg-koe-surface text-koe-text-muted shadow-sm transition-all hover:rotate-12 hover:text-koe-text"
+                  aria-label=${this.theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+                  title=${this.theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+                  @click=${this.toggleTheme}
                 >
-                  ${total}
-                </span>` : A}
-          </h3>
-          <button
-            type="button"
-            class="theme-toggle inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition-all hover:rotate-12 hover:text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
-            aria-label=${this.theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-            title=${this.theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-            @click=${this.toggleTheme}
-          >
-            ${this.icon(this.theme === "dark" ? ICON_PATHS.sun : ICON_PATHS.moon, "h-[18px] w-[18px]")}
-          </button>
+                  ${this.icon(
+      this.theme === "dark" ? ICON_PATHS.sun : ICON_PATHS.moon,
+      "h-[18px] w-[18px]"
+    )}
+                </button>
+              ` : A}
         </div>
 
         ${this.error ? b2`<p
-              class="error pop-in mb-4 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-400"
+              part="error"
+              class="error pop-in mb-4 flex items-center gap-2 rounded-xl border border-koe-danger-border bg-koe-danger-soft px-3 py-2 text-sm text-koe-danger"
               role="alert"
             >
               ${this.icon(ICON_PATHS.alert, "h-4 w-4 shrink-0")}
               <span>${this.error}</span>
             </p>` : A}
 
-        <form class="composer mb-8" @submit=${this.handleSubmit}>
+        <form part="composer" class="composer mb-8" @submit=${this.handleSubmit}>
           ${this.renderComposer({
       scope: COMPOSER_SCOPE,
       placeholder: "What are your thoughts?",
@@ -5779,25 +5818,22 @@ var KoeComments = class extends i4 {
         </form>
 
         ${this.loading ? this.renderLoading() : this.renderCommentList()}
+        <slot name="footer"></slot>
       </section>
     `;
   }
   renderLoading() {
     return b2`
-      <div class="space-y-5" aria-busy="true">
+      <div part="loading" class="space-y-5" aria-busy="true">
         ${[1, 2, 3].map(
       () => b2`
             <div class="flex animate-pulse gap-3">
               <div
-                class="h-8 w-8 shrink-0 rounded-full bg-slate-200 dark:bg-slate-800"
+                class="h-8 w-8 shrink-0 rounded-full bg-koe-skeleton"
               ></div>
               <div class="flex-1 space-y-2 py-1">
-                <div
-                  class="h-3 w-1/4 rounded-full bg-slate-200 dark:bg-slate-800"
-                ></div>
-                <div
-                  class="h-3 w-3/4 rounded-full bg-slate-200 dark:bg-slate-800"
-                ></div>
+                <div class="h-3 w-1/4 rounded-full bg-koe-skeleton"></div>
+                <div class="h-3 w-3/4 rounded-full bg-koe-skeleton"></div>
               </div>
             </div>
           `
@@ -5807,22 +5843,26 @@ var KoeComments = class extends i4 {
   }
   renderCommentList() {
     return b2`
-      <ul class="comment-list comment-list--root">
+      <ul part="list" class="comment-list comment-list--root">
         ${this.comments.map((comment) => this.renderComment(comment))}
       </ul>
       ${this.comments.length === 0 ? b2`
             <div
-              class="empty rounded-2xl border border-dashed border-slate-300 px-6 py-12 text-center dark:border-slate-700"
+              part="empty"
+              class="empty rounded-2xl border border-dashed border-koe-border-strong px-6 py-12 text-center"
             >
-              <div class="mb-3 text-3xl" aria-hidden="true">💬</div>
-              <p
-                class="text-sm font-semibold text-slate-600 dark:text-slate-300"
-              >
-                No comments yet
-              </p>
-              <p class="mt-1 text-xs text-slate-400 dark:text-slate-500">
-                Be the first to share your thoughts.
-              </p>
+              <slot name="empty">
+                <div class="mb-3 text-3xl" aria-hidden="true">💬</div>
+                <p
+                  part="empty-title"
+                  class="text-sm font-semibold text-koe-text-muted"
+                >
+                  No comments yet
+                </p>
+                <p part="empty-text" class="mt-1 text-xs text-koe-text-subtle">
+                  Be the first to share your thoughts.
+                </p>
+              </slot>
             </div>
           ` : A}
     `;
@@ -5834,7 +5874,8 @@ var KoeComments = class extends i4 {
       <div class="flex gap-3">
         ${this.avatar("composer", true)}
         <div
-          class="composer-shell relative min-w-0 flex-1 rounded-2xl border bg-white transition-all duration-200 dark:bg-slate-900 ${active ? "border-slate-300 shadow-sm ring-4 ring-slate-900/5 dark:border-slate-600 dark:ring-white/5" : "border-slate-200 hover:border-slate-300 dark:border-slate-700 dark:hover:border-slate-600"}"
+          part="composer-shell"
+          class="composer-shell relative min-w-0 flex-1 rounded-2xl border bg-koe-surface transition-all duration-200 ${active ? "border-koe-border-strong shadow-sm ring-4 ring-[var(--koe-focus-ring)]" : "border-koe-border hover:border-koe-border-strong"}"
         >
           <input
             type="file"
@@ -5845,10 +5886,11 @@ var KoeComments = class extends i4 {
           />
           ${active ? this.renderToolbar(scope) : A}
           <textarea
+            part="textarea"
             rows=${options.rows}
             data-scope=${scope}
             placeholder=${options.placeholder}
-            class="block w-full resize-y border-0 bg-transparent px-4 py-3 text-sm leading-relaxed text-slate-900 placeholder:text-slate-400 focus:outline-none dark:text-slate-100 dark:placeholder:text-slate-500"
+            class="block w-full resize-y border-0 bg-transparent px-4 py-3 text-sm leading-relaxed text-koe-text placeholder:text-koe-text-subtle focus:outline-none"
             .value=${options.draft}
             @input=${options.onInput}
             @paste=${(e7) => this.handlePaste(scope, e7)}
@@ -5857,10 +5899,11 @@ var KoeComments = class extends i4 {
           ></textarea>
           ${active ? b2`
                 <div
+                  part="composer-actions"
                   class="flex items-center justify-between gap-2 px-3 pb-3 pt-1"
                 >
                   <span
-                    class="hidden text-xs text-slate-400 sm:inline dark:text-slate-500"
+                    class="hidden text-xs text-koe-text-subtle sm:inline"
                   >
                     Markdown supported
                   </span>
@@ -5868,7 +5911,8 @@ var KoeComments = class extends i4 {
                     ${options.onCancel ? b2`
                           <button
                             type="button"
-                            class="rounded-full px-3 py-1.5 text-sm font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                            part="cancel"
+                            class="rounded-full px-3 py-1.5 text-sm font-medium text-koe-text-muted transition-colors hover:bg-koe-surface-sunken hover:text-koe-text"
                             @click=${options.onCancel}
                           >
                             Cancel
@@ -5876,7 +5920,8 @@ var KoeComments = class extends i4 {
                         ` : A}
                     <button
                       type="submit"
-                      class="rounded-full bg-slate-900 px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-900/40 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200 dark:focus-visible:ring-white/40"
+                      part="submit"
+                      class="rounded-full bg-koe-surface-strong px-4 py-1.5 text-sm font-semibold text-koe-text-inverse shadow-sm transition-all hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-koe-accent-soft disabled:cursor-not-allowed disabled:opacity-40"
                       ?disabled=${options.submitting || !options.draft.trim()}
                     >
                       ${options.submitting ? options.postingLabel : options.submitLabel}
@@ -5893,10 +5938,12 @@ var KoeComments = class extends i4 {
     const preventFocus = (e7) => e7.preventDefault();
     return b2`
       <div
-        class="composer-toolbar flex flex-wrap items-center gap-0.5 border-b border-slate-100 px-2 py-1.5 dark:border-slate-800"
+        part="toolbar"
+        class="composer-toolbar flex flex-wrap items-center gap-0.5 border-b border-koe-border px-2 py-1.5"
       >
         <button
           type="button"
+          part="toolbar-button"
           class="toolbar-button"
           aria-label="Bold"
           title="Bold"
@@ -5907,6 +5954,7 @@ var KoeComments = class extends i4 {
         </button>
         <button
           type="button"
+          part="toolbar-button"
           class="toolbar-button"
           aria-label="Italic"
           title="Italic"
@@ -5917,6 +5965,7 @@ var KoeComments = class extends i4 {
         </button>
         <button
           type="button"
+          part="toolbar-button"
           class="toolbar-button"
           aria-label="Strikethrough"
           title="Strikethrough"
@@ -5926,11 +5975,12 @@ var KoeComments = class extends i4 {
           <span class="text-sm line-through">S</span>
         </button>
         <span
-          class="mx-1 h-5 w-px bg-slate-200 dark:bg-slate-700"
+          class="mx-1 h-5 w-px bg-koe-border"
           aria-hidden="true"
         ></span>
         <button
           type="button"
+          part="toolbar-button"
           class="toolbar-button"
           aria-label="Quote"
           title="Quote"
@@ -5941,6 +5991,7 @@ var KoeComments = class extends i4 {
         </button>
         <button
           type="button"
+          part="toolbar-button"
           class="toolbar-button"
           aria-label="Code"
           title="Code"
@@ -5951,6 +6002,7 @@ var KoeComments = class extends i4 {
         </button>
         <button
           type="button"
+          part="toolbar-button"
           class="toolbar-button"
           aria-label="Link"
           title="Link"
@@ -5960,12 +6012,13 @@ var KoeComments = class extends i4 {
           ${this.icon(ICON_PATHS.link)}
         </button>
         <span
-          class="mx-1 h-5 w-px bg-slate-200 dark:bg-slate-700"
+          class="mx-1 h-5 w-px bg-koe-border"
           aria-hidden="true"
         ></span>
         <button
           type="button"
-          class="gif-button flex h-8 items-center justify-center gap-1.5 rounded-lg px-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100 ${this.openGifPicker === scope ? "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-100" : ""}"
+          part="toolbar-gif"
+          class="gif-button flex h-8 items-center justify-center gap-1.5 rounded-lg px-2 text-koe-text-muted transition-colors hover:bg-koe-surface-sunken hover:text-koe-text ${this.openGifPicker === scope ? "bg-koe-surface-sunken text-koe-text" : ""}"
           aria-label="Insert image or GIF"
           title="Insert image or GIF"
           @mousedown=${preventFocus}
@@ -5973,7 +6026,7 @@ var KoeComments = class extends i4 {
         >
           ${this.icon(ICON_PATHS.image)}
           <span
-            class="rounded bg-gradient-to-r from-fuchsia-500 to-pink-500 px-1.5 py-0.5 text-[10px] font-extrabold leading-none text-white"
+            class="rounded-md bg-gradient-to-r from-koe-gif-from to-koe-gif-to px-1.5 py-0.5 text-[10px] font-extrabold leading-none text-koe-accent-contrast"
           >
             GIF
           </span>
@@ -5981,7 +6034,8 @@ var KoeComments = class extends i4 {
         ${this.mediaProvider ? b2`
               <button
                 type="button"
-                class="media-upload-button flex h-8 items-center justify-center gap-1.5 rounded-lg px-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                part="toolbar-upload"
+                class="media-upload-button flex h-8 items-center justify-center gap-1.5 rounded-lg px-2 text-koe-text-muted transition-colors hover:bg-koe-surface-sunken hover:text-koe-text disabled:cursor-not-allowed disabled:opacity-50"
                 aria-label="Upload image"
                 title=${this.uploadingScope === scope ? "Uploading..." : "Upload image"}
                 ?disabled=${this.uploadingScope === scope}
@@ -5999,16 +6053,18 @@ var KoeComments = class extends i4 {
   renderGifPicker(scope) {
     return b2`
       <div
-        class="gif-picker pop-in absolute right-2 top-full z-20 mt-2 w-80 max-w-[calc(100vw-4rem)] rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-xl backdrop-blur-sm dark:border-slate-700 dark:bg-slate-900/95"
+        part="gif-picker"
+        class="gif-picker pop-in absolute right-2 top-full z-20 mt-2 w-80 max-w-[calc(100vw-4rem)] rounded-2xl border border-koe-border bg-koe-surface p-3 shadow-xl backdrop-blur-sm"
       >
         <div class="mb-2 flex items-center justify-between">
           <span
-            class="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500"
+            class="text-xs font-semibold uppercase tracking-wide text-koe-text-subtle"
           >
             Image / GIF
           </span>
           <button
             type="button"
+            part="gif-close"
             class="toolbar-button !h-6 !w-6"
             aria-label="Close image picker"
             @click=${this.closeGifPicker}
@@ -6019,7 +6075,8 @@ var KoeComments = class extends i4 {
         ${this.gifApiKey ? b2`
               <input
                 type="text"
-                class="mb-2 w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-100 dark:placeholder:text-slate-500"
+                part="gif-search"
+                class="mb-2 w-full rounded-lg border border-koe-border bg-koe-surface-muted px-2.5 py-1.5 text-xs text-koe-text placeholder:text-koe-text-subtle focus:border-koe-accent focus:outline-none"
                 placeholder="Search Giphy..."
                 .value=${this.gifQuery}
                 @input=${(e7) => this.handleGifSearchInput(
@@ -6027,18 +6084,19 @@ var KoeComments = class extends i4 {
     )}
               />
               <div
+                part="gif-grid"
                 class="gif-grid mb-2 grid max-h-56 grid-cols-3 gap-2 overflow-y-auto"
               >
                 ${this.gifLoading ? b2`<p
-                      class="col-span-3 py-6 text-center text-xs text-slate-400"
+                      class="col-span-3 py-6 text-center text-xs text-koe-text-subtle"
                     >
                       Loading GIFs...
                     </p>` : this.gifError ? b2`<p
-                        class="col-span-3 py-6 text-center text-xs text-red-500"
+                        class="col-span-3 py-6 text-center text-xs text-koe-danger"
                       >
                         ${this.gifError}
                       </p>` : this.gifResults.length === 0 ? b2`<p
-                          class="col-span-3 py-6 text-center text-xs text-slate-400"
+                          class="col-span-3 py-6 text-center text-xs text-koe-text-subtle"
                         >
                           No GIFs found.
                         </p>` : this.gifResults.map(
@@ -6046,12 +6104,12 @@ var KoeComments = class extends i4 {
                             src=${url}
                             alt="GIF option"
                             loading="lazy"
-                            class="h-20 w-full cursor-pointer rounded-lg bg-slate-100 object-cover transition-opacity hover:opacity-75 dark:bg-slate-800"
+                            class="h-20 w-full cursor-pointer rounded-lg bg-koe-surface-sunken object-cover transition-opacity hover:opacity-75"
                             @click=${() => this.insertGif(scope, url)}
                           />`
     )}
               </div>
-            ` : b2`<p class="mb-2 text-xs text-slate-400 dark:text-slate-500">
+            ` : b2`<p class="mb-2 text-xs text-koe-text-subtle">
               Paste an image URL below, or set the
               <code class="font-mono">gif-api-key</code> attribute to search
               Giphy.
@@ -6059,7 +6117,8 @@ var KoeComments = class extends i4 {
         <div class="flex gap-2">
           <input
             type="text"
-            class="min-w-0 flex-1 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-100 dark:placeholder:text-slate-500"
+            part="gif-url"
+            class="min-w-0 flex-1 rounded-lg border border-koe-border bg-koe-surface-muted px-2.5 py-1.5 text-xs text-koe-text placeholder:text-koe-text-subtle focus:border-koe-accent focus:outline-none"
             placeholder="https://example.com/image.gif"
             .value=${this.gifUrl}
             @input=${(e7) => this.gifUrl = e7.target.value}
@@ -6073,32 +6132,35 @@ var KoeComments = class extends i4 {
           />
           <button
             type="button"
-            class="shrink-0 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
+            part="gif-insert"
+            class="shrink-0 rounded-lg bg-koe-surface-strong px-3 py-1.5 text-xs font-semibold text-koe-text-inverse transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
             ?disabled=${!this.gifUrl.trim()}
             @click=${() => void this.insertCustomGif(scope)}
           >
             Insert
           </button>
         </div>
-        ${this.gifError && this.gifApiKey ? A : this.gifError ? b2`<p class="mt-1.5 text-xs text-red-500">${this.gifError}</p>` : A}
+        ${this.gifError && this.gifApiKey ? A : this.gifError ? b2`<p class="mt-1.5 text-xs text-koe-danger">${this.gifError}</p>` : A}
       </div>
     `;
   }
   renderReportPicker(commentId) {
     return b2`
       <div
-        class="report-picker pop-in mt-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-900"
+        part="report-picker"
+        class="report-picker pop-in mt-3 rounded-2xl border border-koe-border bg-koe-surface p-3 shadow-sm"
       >
         <label
-          class="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500"
+          class="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-koe-text-subtle"
           for="report-reason-${commentId}"
         >
           Report this comment
         </label>
         <textarea
           id="report-reason-${commentId}"
+          part="report-input"
           rows="2"
-          class="report-reason-input block w-full resize-y rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-400 focus:outline-none dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-100 dark:placeholder:text-slate-500"
+          class="report-reason-input block w-full resize-y rounded-xl border border-koe-border bg-koe-surface-muted px-3 py-2 text-sm text-koe-text placeholder:text-koe-text-subtle focus:border-koe-border-strong focus:outline-none"
           placeholder="Why are you reporting this comment?"
           .value=${this.reportReason}
           @input=${(e7) => this.reportReason = e7.target.value}
@@ -6106,14 +6168,16 @@ var KoeComments = class extends i4 {
         <div class="mt-2 flex justify-end gap-2">
           <button
             type="button"
-            class="rounded-full px-3 py-1.5 text-sm font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+            part="report-cancel"
+            class="rounded-full px-3 py-1.5 text-sm font-medium text-koe-text-muted transition-colors hover:bg-koe-surface-sunken hover:text-koe-text"
             @click=${this.closeReportPicker}
           >
             Cancel
           </button>
           <button
             type="button"
-            class="report-submit rounded-full bg-red-600 px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-red-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40 disabled:cursor-not-allowed disabled:opacity-40"
+            part="report-submit"
+            class="report-submit rounded-full bg-koe-danger px-4 py-1.5 text-sm font-semibold text-koe-danger-contrast shadow-sm transition-all hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-koe-danger-soft disabled:cursor-not-allowed disabled:opacity-40"
             ?disabled=${this.reporting || !this.reportReason.trim()}
             @click=${() => this.submitReport(commentId)}
           >
@@ -6134,39 +6198,49 @@ var KoeComments = class extends i4 {
     const reported = this.reportedComments.has(comment.id);
     const childCount = comment.children.length;
     return b2`
-      <li class="comment">
+      <li part="comment" class="comment">
         <div class="flex gap-3">
           ${this.avatar(comment.authorId)}
           <div class="min-w-0 flex-1">
             <div class="mb-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
               <span
-                class="text-sm font-semibold text-slate-900 dark:text-white"
+                part="author"
+                class="text-sm font-semibold text-koe-text"
               >
                 Guest
               </span>
-              <span class="text-slate-300 dark:text-slate-600" aria-hidden="true"
+              <span class="text-koe-border-strong" aria-hidden="true"
                 >·</span
               >
               <time
-                class="comment-time text-xs text-slate-400 dark:text-slate-500"
+                part="time"
+                class="comment-time text-xs text-koe-text-subtle"
                 datetime=${createdAt.toISOString()}
                 title=${createdAt.toLocaleString()}
               >
                 ${formatRelativeTime(createdAt)}
               </time>
-              ${comment.status === "pending" ? b2`<span class="pending-badge">Pending approval</span>` : A}
+              ${comment.status === "pending" ? b2`<span part="pending-badge" class="pending-badge"
+                    >Pending approval</span
+                  >` : A}
             </div>
             <div
-              class="comment-body prose prose-sm prose-slate max-w-none dark:prose-invert"
+              part="body"
+              class="comment-body prose prose-sm max-w-none"
             >${o6(comment.bodyHtml)}</div>
 
-            <div class="comment-actions mt-2.5 flex flex-wrap items-center gap-2">
+            <div
+              part="actions"
+              class="comment-actions mt-2.5 flex flex-wrap items-center gap-2"
+            >
               <div
-                class="vote-controls inline-flex items-center overflow-hidden rounded-full border border-slate-200 dark:border-slate-700"
+                part="vote-controls"
+                class="vote-controls inline-flex items-center overflow-hidden rounded-full border border-koe-border"
               >
                 <button
                   type="button"
-                  class="vote-button flex h-8 w-8 items-center justify-center text-slate-400 transition-colors hover:bg-slate-50 hover:text-blue-600 disabled:opacity-50 dark:hover:bg-slate-800 dark:hover:text-blue-400 ${comment.userVote === 1 ? "active up" : ""}"
+                  part="vote-up"
+                  class="vote-button flex h-8 w-8 items-center justify-center text-koe-text-subtle transition-colors hover:bg-koe-surface-sunken hover:text-koe-accent disabled:opacity-50 ${comment.userVote === 1 ? "active up" : ""}"
                   ?disabled=${this.voting}
                   @click=${() => this.voteComment(comment.id, 1)}
                   aria-label="Upvote"
@@ -6174,13 +6248,15 @@ var KoeComments = class extends i4 {
                   ${this.icon(ICON_PATHS.chevronUp)}
                 </button>
                 <span
-                  class="vote-score min-w-6 text-center text-xs font-semibold tabular-nums text-slate-600 dark:text-slate-300"
+                  part="vote-score"
+                  class="vote-score min-w-6 text-center text-xs font-semibold tabular-nums text-koe-text-muted"
                 >
                   ${comment.upvotes - comment.downvotes}
                 </span>
                 <button
                   type="button"
-                  class="vote-button flex h-8 w-8 items-center justify-center text-slate-400 transition-colors hover:bg-slate-50 hover:text-red-600 disabled:opacity-50 dark:hover:bg-slate-800 dark:hover:text-red-400 ${comment.userVote === -1 ? "active down" : ""}"
+                  part="vote-down"
+                  class="vote-button flex h-8 w-8 items-center justify-center text-koe-text-subtle transition-colors hover:bg-koe-surface-sunken hover:text-koe-danger disabled:opacity-50 ${comment.userVote === -1 ? "active down" : ""}"
                   ?disabled=${this.voting}
                   @click=${() => this.voteComment(comment.id, -1)}
                   aria-label="Downvote"
@@ -6189,14 +6265,18 @@ var KoeComments = class extends i4 {
                 </button>
               </div>
 
-              <div class="reaction-list flex flex-wrap items-center gap-1.5">
+              <div
+                part="reactions"
+                class="reaction-list flex flex-wrap items-center gap-1.5"
+              >
                 ${shown.map(
       ([emoji, count]) => {
         const active = comment.userReactions?.includes(emoji) ?? false;
         return b2`
                       <button
                         type="button"
-                        class="reaction-button inline-flex items-center gap-1 rounded-full border border-slate-200 px-2.5 py-1 text-xs text-slate-600 transition-colors hover:border-slate-300 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:border-slate-600 ${active ? "active" : ""}"
+                        part="reaction"
+                        class="reaction-button inline-flex items-center gap-1 rounded-full border border-koe-border px-2.5 py-1 text-xs text-koe-text-muted transition-colors hover:border-koe-border-strong disabled:opacity-50 ${active ? "active" : ""}"
                         ?disabled=${this.reacting}
                         @click=${() => this.reactToComment(comment.id, emoji)}
                         aria-label=${`React with ${emoji}`}
@@ -6204,7 +6284,8 @@ var KoeComments = class extends i4 {
                       >
                         <span>${emoji}</span>
                         <span
-                          class="reaction-count tabular-nums text-slate-400 dark:text-slate-500"
+                          part="reaction-count"
+                          class="reaction-count tabular-nums text-koe-text-subtle"
                         >
                           ${count}
                         </span>
@@ -6215,7 +6296,8 @@ var KoeComments = class extends i4 {
                 ${canToggle ? b2`
                       <button
                         type="button"
-                        class="reactions-toggle inline-flex items-center rounded-full border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-500 transition-colors hover:border-slate-300 hover:text-slate-700 dark:border-slate-700 dark:text-slate-400 dark:hover:border-slate-600 dark:hover:text-slate-200"
+                        part="reactions-toggle"
+                        class="reactions-toggle inline-flex items-center rounded-full border border-koe-border px-2.5 py-1 text-xs font-medium text-koe-text-muted transition-colors hover:border-koe-border-strong hover:text-koe-text"
                         @click=${() => this.toggleReactions(comment.id)}
                       >
                         ${expanded ? "Show fewer" : `+${hiddenCount} more`}
@@ -6223,7 +6305,8 @@ var KoeComments = class extends i4 {
                     ` : A}
                 <button
                   type="button"
-                  class="add-reaction-button inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-400 transition-colors hover:border-slate-300 hover:text-slate-600 dark:border-slate-700 dark:hover:border-slate-600 dark:hover:text-slate-300"
+                  part="add-reaction"
+                  class="add-reaction-button inline-flex h-8 w-8 items-center justify-center rounded-full border border-koe-border text-koe-text-subtle transition-colors hover:border-koe-border-strong hover:text-koe-text-muted"
                   aria-label="Add reaction"
                   @click=${() => this.toggleReactionPicker(comment.id)}
                 >
@@ -6231,13 +6314,15 @@ var KoeComments = class extends i4 {
                 </button>
                 ${this.openReactionPicker === comment.id ? b2`
                       <div
-                        class="reaction-picker pop-in inline-flex flex-wrap gap-1 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg dark:border-slate-700 dark:bg-slate-900"
+                        part="reaction-picker"
+                        class="reaction-picker pop-in inline-flex flex-wrap gap-1 rounded-xl border border-koe-border bg-koe-surface p-1.5 shadow-lg"
                       >
                         ${this.emojis.map(
       (emoji) => b2`
                             <button
                               type="button"
-                              class="reaction-picker-button flex h-8 w-8 items-center justify-center rounded-lg text-base transition-colors hover:bg-slate-100 dark:hover:bg-slate-800"
+                              part="reaction-picker-button"
+                              class="reaction-picker-button flex h-8 w-8 items-center justify-center rounded-lg text-base transition-colors hover:bg-koe-surface-sunken"
                               aria-label=${`React with ${emoji}`}
                               @click=${() => this.reactToComment(comment.id, emoji)}
                             >
@@ -6251,7 +6336,8 @@ var KoeComments = class extends i4 {
 
               <button
                 type="button"
-                class="report-button ml-auto inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-60 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                part="report-button"
+                class="report-button ml-auto inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium text-koe-text-muted transition-colors hover:bg-koe-surface-sunken hover:text-koe-text disabled:cursor-not-allowed disabled:opacity-60"
                 aria-label="Report comment"
                 title=${reported ? "Reported" : "Report"}
                 ?disabled=${reported}
@@ -6262,7 +6348,8 @@ var KoeComments = class extends i4 {
               </button>
               <button
                 type="button"
-                class="reply-button inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                part="reply-button"
+                class="reply-button inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium text-koe-text-muted transition-colors hover:bg-koe-surface-sunken hover:text-koe-text"
                 @click=${() => this.startReply(comment.id)}
               >
                 ${this.icon(ICON_PATHS.reply)}
@@ -6273,7 +6360,7 @@ var KoeComments = class extends i4 {
             ${this.openReportPicker === comment.id ? this.renderReportPicker(comment.id) : A}
 
             ${comment.id === this.replyTo ? b2`
-                  <div class="reply-composer pop-in mt-3">
+                  <div part="reply-composer" class="reply-composer pop-in mt-3">
                     <form
                       @submit=${this.handleReplySubmit}
                     >
@@ -6296,7 +6383,8 @@ var KoeComments = class extends i4 {
             ${childCount > 0 ? b2`
                   <button
                     type="button"
-                    class="thread-toggle mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 transition-colors hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+                    part="thread-toggle"
+                    class="thread-toggle mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-koe-text-muted transition-colors hover:text-koe-text"
                     @click=${() => this.toggleThread(comment.id)}
                   >
                     ${this.icon(
@@ -6306,6 +6394,7 @@ var KoeComments = class extends i4 {
                   </button>
                   ${collapsed ? A : b2`
                         <ul
+                          part="nested-list"
                           class="comment-list comment-list--nested thread-line mt-2 ml-2 space-y-3 pl-4"
                           style="border-color: var(--koe-thread-line-${depth % 4});"
                         >
@@ -6337,6 +6426,12 @@ __decorateClass([
 __decorateClass([
   n4({ type: String, attribute: "media-api-key" })
 ], KoeComments.prototype, "mediaApiKey", 2);
+__decorateClass([
+  n4({ type: String, reflect: true })
+], KoeComments.prototype, "theme", 2);
+__decorateClass([
+  n4({ type: Boolean, attribute: "show-theme-toggle" })
+], KoeComments.prototype, "showThemeToggle", 2);
 __decorateClass([
   r5()
 ], KoeComments.prototype, "comments", 2);
@@ -6379,9 +6474,6 @@ __decorateClass([
 __decorateClass([
   r5()
 ], KoeComments.prototype, "error", 2);
-__decorateClass([
-  r5()
-], KoeComments.prototype, "theme", 2);
 __decorateClass([
   r5()
 ], KoeComments.prototype, "activeScope", 2);
@@ -6429,44 +6521,26 @@ var KoeArticleReactions = class extends i4 {
     this.baseUrl = "";
     this.threadRef = "";
     this.reactionEmojis = "";
+    this.theme = "light";
     this.threadId = "";
     this.reactionTotals = {};
     this.userReactions = [];
     this.loading = true;
     this.reacting = false;
     this.error = "";
-    this.theme = "light";
     this.client = null;
     this.token = "";
-    this.handleExternalThemeChange = (e7) => {
-      const theme = e7.detail?.theme;
-      if (theme === "light" || theme === "dark") {
-        this.theme = theme;
-      }
-    };
   }
   get emojis() {
     return this.reactionEmojis ? this.reactionEmojis.split(",").map((emoji) => emoji.trim()).filter(Boolean) : DEFAULT_EMOJI_ALLOWLIST;
   }
   connectedCallback() {
     super.connectedCallback();
-    this.initTheme();
-    window.addEventListener("koe-theme-change", this.handleExternalThemeChange);
     if (this.threadRef) {
       const effectiveBaseUrl = this.baseUrl || (typeof window !== "undefined" ? window.location.origin : "");
       this.client = createKoeClient({ baseUrl: effectiveBaseUrl });
       void this.load();
     }
-  }
-  disconnectedCallback() {
-    super.disconnectedCallback();
-    window.removeEventListener(
-      "koe-theme-change",
-      this.handleExternalThemeChange
-    );
-  }
-  initTheme() {
-    this.theme = readStoredTheme(localStorage) ?? detectPreferredTheme();
   }
   async ensureGuest() {
     this.token = await ensureGuestSession(this.client, localStorage);
@@ -6529,27 +6603,29 @@ var KoeArticleReactions = class extends i4 {
   render() {
     return b2`
       <section
-        class="koe-article-reactions font-sans antialiased ${this.theme === "dark" ? "dark" : ""}"
+        part="root"
+        class="koe-article-reactions font-sans antialiased"
         style="color-scheme: ${this.theme};"
       >
+        <slot name="label"></slot>
         ${this.error ? b2`<p
-              class="error mb-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-400"
+              part="error"
+              class="error mb-2 rounded-xl border border-koe-danger-border bg-koe-danger-soft px-3 py-2 text-sm text-koe-danger"
               role="alert"
             >
               ${this.error}
             </p>` : A}
         ${this.loading ? this.renderLoading() : this.renderReactions()}
+        <slot name="footer"></slot>
       </section>
     `;
   }
   renderLoading() {
     return b2`
-      <div class="flex gap-1.5" aria-busy="true">
+      <div part="loading" class="flex gap-1.5" aria-busy="true">
         ${this.emojis.map(
       () => b2`
-            <div
-              class="h-8 w-16 animate-pulse rounded-full bg-slate-200 dark:bg-slate-800"
-            ></div>
+            <div class="h-8 w-16 animate-pulse rounded-full bg-koe-skeleton"></div>
           `
     )}
       </div>
@@ -6558,6 +6634,7 @@ var KoeArticleReactions = class extends i4 {
   renderReactions() {
     return b2`
       <div
+        part="group"
         class="article-reactions inline-flex flex-wrap items-center gap-1.5"
         role="group"
         aria-label="Article reactions"
@@ -6567,7 +6644,8 @@ var KoeArticleReactions = class extends i4 {
       return b2`
             <button
               type="button"
-              class="article-reaction-button reaction-button inline-flex items-center gap-1 rounded-full border border-slate-200 px-2.5 py-1 text-xs text-slate-600 transition-colors hover:border-slate-300 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:border-slate-600 ${active ? "active" : ""}"
+              part="reaction"
+              class="article-reaction-button reaction-button inline-flex items-center gap-1 rounded-full border border-koe-border px-2.5 py-1 text-xs text-koe-text-muted transition-colors hover:border-koe-border-strong disabled:opacity-50 ${active ? "active" : ""}"
               data-emoji=${emoji}
               ?disabled=${this.reacting}
               aria-label=${`React with ${emoji}`}
@@ -6576,7 +6654,8 @@ var KoeArticleReactions = class extends i4 {
             >
               <span>${emoji}</span>
               <span
-                class="reaction-count tabular-nums text-slate-400 dark:text-slate-500"
+                part="reaction-count"
+                class="reaction-count tabular-nums text-koe-text-subtle"
               >
                 ${this.countFor(emoji)}
               </span>
@@ -6598,6 +6677,9 @@ __decorateClass([
   n4({ type: String, attribute: "reaction-emojis" })
 ], KoeArticleReactions.prototype, "reactionEmojis", 2);
 __decorateClass([
+  n4({ type: String, reflect: true })
+], KoeArticleReactions.prototype, "theme", 2);
+__decorateClass([
   r5()
 ], KoeArticleReactions.prototype, "threadId", 2);
 __decorateClass([
@@ -6615,9 +6697,6 @@ __decorateClass([
 __decorateClass([
   r5()
 ], KoeArticleReactions.prototype, "error", 2);
-__decorateClass([
-  r5()
-], KoeArticleReactions.prototype, "theme", 2);
 KoeArticleReactions = __decorateClass([
   t3("koe-article-reactions")
 ], KoeArticleReactions);

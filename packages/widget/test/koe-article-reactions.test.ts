@@ -213,4 +213,46 @@ describe("<koe-article-reactions> widget", () => {
     expect(buttonFor(element, "🎉")).not.toBeNull();
     expect(buttonFor(element, "👍")).not.toBeNull();
   });
+
+  it("sources all styling from documented --koe-* tokens", () => {
+    const cssText = KoeArticleReactions.styles
+      .map((style) => style.cssText)
+      .join("\n");
+    for (const token of [
+      "--koe-surface",
+      "--koe-text",
+      "--koe-accent",
+      "--koe-border",
+      "--koe-radius",
+      "--koe-font",
+      "--koe-space",
+    ]) {
+      expect(cssText).toContain(token);
+    }
+    expect(cssText).toContain(":host([theme=dark])");
+    expect(cssText).not.toMatch(/(text|bg|border|from|to)-slate-/);
+  });
+
+  it("exposes a reactive theme property and structural parts and slots", async () => {
+    const element = mount("article-contract");
+    await waitForButtons(element);
+
+    expect(element.theme).toBe("light");
+    expect(element.getAttribute("theme")).toBe("light");
+    element.theme = "dark";
+    await element.updateComplete;
+    expect(element.getAttribute("theme")).toBe("dark");
+
+    for (const part of ["root", "group", "reaction", "reaction-count"]) {
+      expect(
+        element.shadowRoot!.querySelector(`[part~="${part}"]`)
+      ).not.toBeNull();
+    }
+
+    for (const name of ["label", "footer"]) {
+      expect(
+        element.shadowRoot!.querySelector(`slot[name="${name}"]`)
+      ).not.toBeNull();
+    }
+  });
 });

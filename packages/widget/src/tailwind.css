@@ -3,7 +3,53 @@
 @source "./koe-comments.ts";
 @source "./koe-article-reactions.ts";
 
-@custom-variant dark (&:where(.dark, .dark *));
+/*
+ * Semantic theme contract. Every colour, radius, spacing unit, and font in the
+ * widget resolves from one of these documented `--koe-*` custom properties.
+ * A host populates them from its own design tokens; the values below are the
+ * built-in defaults. Names are public API — see docs/adr/0002.
+ */
+@theme {
+  --font-sans: var(--koe-font);
+  --font-mono: var(--koe-font-mono);
+  --spacing: var(--koe-space);
+
+  --color-koe-surface: var(--koe-surface);
+  --color-koe-surface-muted: var(--koe-surface-muted);
+  --color-koe-surface-sunken: var(--koe-surface-sunken);
+  --color-koe-surface-strong: var(--koe-surface-strong);
+  --color-koe-skeleton: var(--koe-skeleton);
+
+  --color-koe-text: var(--koe-text);
+  --color-koe-text-muted: var(--koe-text-muted);
+  --color-koe-text-subtle: var(--koe-text-subtle);
+  --color-koe-text-inverse: var(--koe-text-inverse);
+
+  --color-koe-accent: var(--koe-accent);
+  --color-koe-accent-soft: var(--koe-accent-soft);
+  --color-koe-accent-contrast: var(--koe-accent-contrast);
+
+  --color-koe-border: var(--koe-border);
+  --color-koe-border-strong: var(--koe-border-strong);
+
+  --color-koe-danger: var(--koe-danger);
+  --color-koe-danger-soft: var(--koe-danger-soft);
+  --color-koe-danger-border: var(--koe-danger-border);
+  --color-koe-danger-contrast: var(--koe-danger-contrast);
+
+  --color-koe-warning: var(--koe-warning);
+  --color-koe-warning-soft: var(--koe-warning-soft);
+
+  --color-koe-gif-from: var(--koe-gif-from);
+  --color-koe-gif-to: var(--koe-gif-to);
+
+  --radius-sm: var(--koe-radius-sm);
+  --radius-md: var(--koe-radius-md);
+  --radius-lg: var(--koe-radius-lg);
+  --radius-xl: var(--koe-radius-xl);
+  --radius-2xl: var(--koe-radius-2xl);
+  --radius-full: var(--koe-radius-full);
+}
 
 @keyframes koe-pop {
   from {
@@ -23,25 +69,103 @@
 @layer components {
   :host {
     display: block;
-    font-family: var(--koe-font, system-ui, sans-serif);
-    color: var(--koe-text, #0f172a);
-  }
 
-  .koe-comments {
-    --koe-divider: #e5e7eb;
+    /* Typography */
+    --koe-font: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+      Roboto, sans-serif;
+    --koe-font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+    /* Spacing base unit (all Tailwind spacing utilities are multiples) */
+    --koe-space: 0.25rem;
+
+    /* Radii — names match the Tailwind `rounded-*` scale they drive */
+    --koe-radius-sm: 0.25rem;
+    --koe-radius-md: 0.375rem;
+    --koe-radius-lg: 0.5rem;
+    --koe-radius-xl: 0.75rem;
+    --koe-radius-2xl: 1rem;
+    --koe-radius-full: 9999px;
+
+    /* Surfaces */
+    --koe-surface: #ffffff;
+    --koe-surface-muted: #f8fafc;
+    --koe-surface-sunken: #f1f5f9;
+    --koe-surface-strong: #0f172a;
+    --koe-skeleton: #e2e8f0;
+
+    /* Text */
+    --koe-text: #0f172a;
+    --koe-text-muted: #64748b;
+    --koe-text-subtle: #94a3b8;
+    --koe-text-inverse: #ffffff;
+
+    /* Accent */
+    --koe-accent: #2563eb;
+    --koe-accent-soft: #eff6ff;
+    --koe-accent-contrast: #ffffff;
+
+    /* Borders */
+    --koe-border: #e2e8f0;
+    --koe-border-strong: #cbd5e1;
+    --koe-focus-ring: rgb(15 23 42 / 0.08);
+
+    /* Danger */
+    --koe-danger: #dc2626;
+    --koe-danger-soft: #fef2f2;
+    --koe-danger-border: #fecaca;
+    --koe-danger-contrast: #ffffff;
+
+    /* Warning */
+    --koe-warning: #92400e;
+    --koe-warning-soft: #fef3c7;
+
+    /* Brand accents */
+    --koe-gif-from: #d946ef;
+    --koe-gif-to: #ec4899;
+
+    /* Nested thread connector lines */
     --koe-thread-line-0: #e5e7eb;
     --koe-thread-line-1: #bae6fd;
     --koe-thread-line-2: #ddd6fe;
     --koe-thread-line-3: #a7f3d0;
+
+    font-family: var(--koe-font);
+    color: var(--koe-text);
   }
 
-  .koe-comments.dark {
+  :host([theme="dark"]) {
+    --koe-surface: #0f172a;
+    --koe-surface-muted: #1e293b;
+    --koe-surface-sunken: #1e293b;
+    --koe-surface-strong: #f8fafc;
+    --koe-skeleton: #1e293b;
+
     --koe-text: #e2e8f0;
-    --koe-divider: #1e293b;
+    --koe-text-muted: #94a3b8;
+    --koe-text-subtle: #64748b;
+    --koe-text-inverse: #0f172a;
+
+    --koe-accent: #60a5fa;
+    --koe-accent-soft: rgb(37 99 235 / 0.18);
+    --koe-accent-contrast: #ffffff;
+
+    --koe-border: #1e293b;
+    --koe-border-strong: #475569;
+    --koe-focus-ring: rgb(255 255 255 / 0.06);
+
+    --koe-danger: #f87171;
+    --koe-danger-soft: rgb(220 38 38 / 0.18);
+    --koe-danger-border: rgb(220 38 38 / 0.5);
+    --koe-danger-contrast: #ffffff;
+
+    --koe-warning: #fcd34d;
+    --koe-warning-soft: rgb(251 191 36 / 0.12);
+
     --koe-thread-line-0: #334155;
     --koe-thread-line-1: #075985;
     --koe-thread-line-2: #5b21b6;
     --koe-thread-line-3: #065f46;
+
     color: var(--koe-text);
   }
 
@@ -52,19 +176,14 @@
   }
 
   .comment-list--root > .comment + .comment {
-    margin-top: 1.5rem;
-    padding-top: 1.5rem;
-    border-top: 1px solid var(--koe-divider);
+    margin-top: calc(var(--koe-space) * 6);
+    padding-top: calc(var(--koe-space) * 6);
+    border-top: 1px solid var(--koe-border);
   }
 
   .thread-line {
     border-left-width: 2px;
     border-left-style: solid;
-  }
-
-  .comment-body {
-    white-space: pre-wrap;
-    word-break: break-word;
   }
 
   .comment-body > :first-child {
@@ -79,92 +198,85 @@
     display: inline-block;
     height: auto;
     max-width: min(320px, 100%);
-    border-radius: 0.75rem;
-    margin: 0.25rem 0;
+    border-radius: var(--koe-radius-xl);
+    margin: var(--koe-space) 0;
   }
 
   .pending-badge {
     display: inline-flex;
     align-items: center;
-    padding: 1px 8px;
-    border-radius: 999px;
+    padding: 1px calc(var(--koe-space) * 2);
+    border-radius: var(--koe-radius-full);
     font-size: 0.7rem;
     font-weight: 500;
-    color: #92400e;
-    background-color: #fef3c7;
+    color: var(--koe-warning);
+    background-color: var(--koe-warning-soft);
     white-space: nowrap;
-  }
-
-  .dark .pending-badge {
-    color: #fcd34d;
-    background-color: rgb(251 191 36 / 0.12);
   }
 
   .toolbar-button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 2rem;
-    height: 2rem;
-    border-radius: 0.5rem;
-    color: #64748b;
+    width: calc(var(--koe-space) * 8);
+    height: calc(var(--koe-space) * 8);
+    border-radius: var(--koe-radius-lg);
+    color: var(--koe-text-muted);
     transition:
       background-color 0.15s ease,
       color 0.15s ease;
   }
 
   .toolbar-button:hover {
-    background-color: #f1f5f9;
-    color: #0f172a;
-  }
-
-  .dark .toolbar-button {
-    color: #94a3b8;
-  }
-
-  .dark .toolbar-button:hover {
-    background-color: #1e293b;
-    color: #f1f5f9;
+    background-color: var(--koe-surface-sunken);
+    color: var(--koe-text);
   }
 }
 
 .vote-button.active.up {
-  color: #2563eb;
-  background-color: #eff6ff;
-}
-
-.dark .vote-button.active.up {
-  color: #60a5fa;
-  background-color: rgb(37 99 235 / 0.18);
+  color: var(--koe-accent);
+  background-color: var(--koe-accent-soft);
 }
 
 .vote-button.active.down {
-  color: #dc2626;
-  background-color: #fef2f2;
-}
-
-.dark .vote-button.active.down {
-  color: #f87171;
-  background-color: rgb(220 38 38 / 0.18);
+  color: var(--koe-danger);
+  background-color: var(--koe-danger-soft);
 }
 
 .reaction-button.active {
-  color: #1d4ed8;
-  border-color: #93c5fd;
-  background-color: #eff6ff;
+  color: var(--koe-accent);
+  border-color: var(--koe-accent);
+  background-color: var(--koe-accent-soft);
   font-weight: 600;
 }
 
 .reaction-button.active .reaction-count {
-  color: #2563eb;
+  color: var(--koe-accent);
 }
 
-.dark .reaction-button.active {
-  color: #93c5fd;
-  border-color: #1e40af;
-  background-color: rgb(37 99 235 / 0.18);
-}
+/*
+ * Markdown body typography, driven from the same tokens so it tracks the
+ * active theme and any host overrides. Declared outside the cascade layers so
+ * it wins over the typography plugin defaults.
+ */
+.comment-body {
+  white-space: pre-wrap;
+  word-break: break-word;
 
-.dark .reaction-button.active .reaction-count {
-  color: #bfdbfe;
+  --tw-prose-body: var(--koe-text);
+  --tw-prose-headings: var(--koe-text);
+  --tw-prose-lead: var(--koe-text-muted);
+  --tw-prose-links: var(--koe-accent);
+  --tw-prose-bold: var(--koe-text);
+  --tw-prose-counters: var(--koe-text-muted);
+  --tw-prose-bullets: var(--koe-border-strong);
+  --tw-prose-hr: var(--koe-border);
+  --tw-prose-quotes: var(--koe-text-muted);
+  --tw-prose-quote-borders: var(--koe-border);
+  --tw-prose-captions: var(--koe-text-muted);
+  --tw-prose-code: var(--koe-text);
+  --tw-prose-pre-code: var(--koe-text);
+  --tw-prose-pre-bg: var(--koe-surface-sunken);
+  --tw-prose-th-borders: var(--koe-border);
+  --tw-prose-td-borders: var(--koe-border);
 }

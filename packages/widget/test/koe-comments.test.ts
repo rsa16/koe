@@ -594,4 +594,107 @@ describe("<koe-comments> widget", () => {
     expect(reportedButton.textContent?.trim()).toBe("Reported");
     expect(reportedButton.disabled).toBe(true);
   });
+
+  it("sources all styling from documented --koe-* tokens", () => {
+    const cssText = KoeComments.styles.map((style) => style.cssText).join("\n");
+    for (const token of [
+      "--koe-surface",
+      "--koe-text",
+      "--koe-accent",
+      "--koe-border",
+      "--koe-radius",
+      "--koe-font",
+      "--koe-space",
+    ]) {
+      expect(cssText).toContain(token);
+    }
+    expect(cssText).toContain(":host([theme=dark])");
+    expect(cssText).not.toMatch(/(text|bg|border|from|to)-slate-/);
+  });
+
+  it("exposes a reactive theme property and structural parts and slots", async () => {
+    const element = mount("widget-contract");
+    await waitFor(() => element.shadowRoot?.querySelector(".empty") !== null);
+
+    expect(element.theme).toBe("light");
+    expect(element.getAttribute("theme")).toBe("light");
+    element.theme = "dark";
+    await element.updateComplete;
+    expect(element.getAttribute("theme")).toBe("dark");
+
+    for (const part of [
+      "root",
+      "header",
+      "title",
+      "composer",
+      "composer-shell",
+      "textarea",
+      "list",
+      "empty",
+      "empty-title",
+      "empty-text",
+    ]) {
+      expect(
+        element.shadowRoot!.querySelector(`[part~="${part}"]`)
+      ).not.toBeNull();
+    }
+
+    for (const name of ["header", "empty", "footer"]) {
+      expect(
+        element.shadowRoot!.querySelector(`slot[name="${name}"]`)
+      ).not.toBeNull();
+    }
+  });
+
+  it("removes the built-in theme toggle unless show-theme-toggle is set", async () => {
+    const element = mount("widget-toggle-off");
+    await waitFor(() => element.shadowRoot?.querySelector(".empty") !== null);
+    expect(
+      element.shadowRoot!.querySelector('[part="theme-toggle"]')
+    ).toBeNull();
+
+    document.body.innerHTML = `<koe-comments base-url="${baseUrl}" thread-ref="widget-toggle-on" show-theme-toggle></koe-comments>`;
+    const toggled = document.querySelector("koe-comments") as KoeComments;
+    await waitFor(() => toggled.shadowRoot?.querySelector(".empty") !== null);
+
+    const toggle = toggled.shadowRoot!.querySelector<HTMLButtonElement>(
+      '[part="theme-toggle"]'
+    );
+    expect(toggle).not.toBeNull();
+    toggle!.click();
+    await toggled.updateComplete;
+    expect(toggled.theme).toBe("dark");
+  });
+
+  it("instruments rendered comments with part hooks", async () => {
+    const element = mount("widget-contract-comment");
+    await waitFor(() => element.shadowRoot?.querySelector(".empty") !== null);
+
+    await postComment(element, "Contract comment");
+    await waitFor(() => {
+      const items = element.shadowRoot!.querySelectorAll(".comment");
+      return (
+        items.length === 1 &&
+        items[0].textContent?.includes("Contract comment")
+      );
+    });
+
+    for (const part of [
+      "comment",
+      "avatar",
+      "author",
+      "time",
+      "body",
+      "actions",
+      "vote-controls",
+      "vote-score",
+      "add-reaction",
+      "report-button",
+      "reply-button",
+    ]) {
+      expect(
+        element.shadowRoot!.querySelector(`[part~="${part}"]`)
+      ).not.toBeNull();
+    }
+  });
 });

@@ -1,7 +1,6 @@
 import { KoeApiError, KoeClient } from "@koe/sdk";
 
 export const ACCESS_TOKEN_KEY = "koe_access_token";
-export const THEME_KEY = "koe_theme";
 
 export interface TokenStorage {
   getItem(key: string): string | null;
@@ -40,16 +39,4 @@ export async function runWithAuthRetry<T>(
     }
     throw err;
   }
-}
-
-export function readStoredTheme(storage: TokenStorage): "light" | "dark" | null {
-  const stored = storage.getItem(THEME_KEY);
-  return stored === "dark" || stored === "light" ? stored : null;
-}
-
-export function detectPreferredTheme(): "light" | "dark" {
-  const prefersDark =
-    typeof window.matchMedia === "function" &&
-    window.matchMedia("(prefers-color-scheme: dark)").matches;
-  return prefersDark ? "dark" : "light";
 }

@@ -8,9 +8,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { tailwindStyles } from "./generated/tailwind.styles.js";
 import {
   ACCESS_TOKEN_KEY,
-  detectPreferredTheme,
   ensureGuestSession,
-  readStoredTheme,
   runWithAuthRetry,
 } from "./session.js";
 
@@ -27,13 +25,15 @@ export class KoeArticleReactions extends LitElement {
   @property({ type: String, attribute: "reaction-emojis" })
   reactionEmojis = "";
 
+  @property({ type: String, reflect: true })
+  theme: "light" | "dark" = "light";
+
   @state() private threadId = "";
   @state() private reactionTotals: Record<string, number> = {};
   @state() private userReactions: string[] = [];
   @state() private loading = true;
   @state() private reacting = false;
   @state() private error = "";
-  @state() private theme: "light" | "dark" = "light";
 
   private client: KoeClient | null = null;
   private token = "";
@@ -49,8 +49,6 @@ export class KoeArticleReactions extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
-    this.initTheme();
-    window.addEventListener("koe-theme-change", this.handleExternalThemeChange);
     if (this.threadRef) {
       const effectiveBaseUrl =
         this.baseUrl ||
@@ -58,25 +56,6 @@ export class KoeArticleReactions extends LitElement {
       this.client = createKoeClient({ baseUrl: effectiveBaseUrl });
       void this.load();
     }
-  }
-
-  disconnectedCallback() {
-    super.disconnectedCallback();
-    window.removeEventListener(
-      "koe-theme-change",
-      this.handleExternalThemeChange
-    );
-  }
-
-  private handleExternalThemeChange = (e: Event) => {
-    const theme = (e as CustomEvent<{ theme?: string }>).detail?.theme;
-    if (theme === "light" || theme === "dark") {
-      this.theme = theme;
-    }
-  };
-
-  private initTheme() {
-    this.theme = readStoredTheme(localStorage) ?? detectPreferredTheme();
   }
 
   private async ensureGuest() {
@@ -148,32 +127,32 @@ export class KoeArticleReactions extends LitElement {
   protected render() {
     return html`
       <section
-        class="koe-article-reactions font-sans antialiased ${this.theme === "dark"
-          ? "dark"
-          : ""}"
+        part="root"
+        class="koe-article-reactions font-sans antialiased"
         style="color-scheme: ${this.theme};"
       >
+        <slot name="label"></slot>
         ${this.error
           ? html`<p
-              class="error mb-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-400"
+              part="error"
+              class="error mb-2 rounded-xl border border-koe-danger-border bg-koe-danger-soft px-3 py-2 text-sm text-koe-danger"
               role="alert"
             >
               ${this.error}
             </p>`
           : nothing}
         ${this.loading ? this.renderLoading() : this.renderReactions()}
+        <slot name="footer"></slot>
       </section>
     `;
   }
 
   private renderLoading(): TemplateResult {
     return html`
-      <div class="flex gap-1.5" aria-busy="true">
+      <div part="loading" class="flex gap-1.5" aria-busy="true">
         ${this.emojis.map(
           () => html`
-            <div
-              class="h-8 w-16 animate-pulse rounded-full bg-slate-200 dark:bg-slate-800"
-            ></div>
+            <div class="h-8 w-16 animate-pulse rounded-full bg-koe-skeleton"></div>
           `
         )}
       </div>
@@ -183,6 +162,7 @@ export class KoeArticleReactions extends LitElement {
   private renderReactions(): TemplateResult {
     return html`
       <div
+        part="group"
         class="article-reactions inline-flex flex-wrap items-center gap-1.5"
         role="group"
         aria-label="Article reactions"
@@ -192,7 +172,8 @@ export class KoeArticleReactions extends LitElement {
           return html`
             <button
               type="button"
-              class="article-reaction-button reaction-button inline-flex items-center gap-1 rounded-full border border-slate-200 px-2.5 py-1 text-xs text-slate-600 transition-colors hover:border-slate-300 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:border-slate-600 ${active
+              part="reaction"
+              class="article-reaction-button reaction-button inline-flex items-center gap-1 rounded-full border border-koe-border px-2.5 py-1 text-xs text-koe-text-muted transition-colors hover:border-koe-border-strong disabled:opacity-50 ${active
                 ? "active"
                 : ""}"
               data-emoji=${emoji}
@@ -203,7 +184,8 @@ export class KoeArticleReactions extends LitElement {
             >
               <span>${emoji}</span>
               <span
-                class="reaction-count tabular-nums text-slate-400 dark:text-slate-500"
+                part="reaction-count"
+                class="reaction-count tabular-nums text-koe-text-subtle"
               >
                 ${this.countFor(emoji)}
               </span>

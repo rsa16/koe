@@ -198,6 +198,25 @@
           border-color 0.2s ease;
       }
 
+      /*
+       * The widgets consume this page's design tokens through the documented
+       * --koe-* contract, without any widget source patching.
+       */
+      koe-comments,
+      koe-article-reactions {
+        --koe-surface: var(--surface);
+        --koe-surface-muted: var(--surface-muted);
+        --koe-surface-sunken: var(--surface-muted);
+        --koe-surface-strong: var(--heading);
+        --koe-text: var(--text);
+        --koe-text-muted: var(--muted);
+        --koe-text-subtle: var(--muted);
+        --koe-text-inverse: var(--surface);
+        --koe-border: var(--border);
+        --koe-border-strong: var(--border);
+        --koe-font: var(--font);
+      }
+
       .article-meta {
         display: inline-flex;
         align-items: center;
@@ -374,6 +393,11 @@
       (function () {
         function applyTheme(theme) {
           document.documentElement.classList.toggle("dark", theme === "dark");
+          document
+            .querySelectorAll("koe-comments, koe-article-reactions")
+            .forEach(function (widget) {
+              widget.theme = theme;
+            });
         }
 
         applyTheme(

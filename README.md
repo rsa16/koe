@@ -54,7 +54,8 @@ web component — with a Material admin UI at `/admin` for moderation.
   read-only **Settings** page surfacing the effective configuration.
 - Pluggable **Media** upload: the widget posts a selected image to imgbb with a
   client-side key and embeds the returned URL as `![image](url)`.
-- Drop-in `<koe-comments>` Lit web component (Tailwind styles, light/dark theme).
+- Drop-in `<koe-comments>` Lit web component, themeable from outside through a
+  documented `--koe-*` token/`::part`/`<slot>` contract.
 - Standalone `<koe-article-reactions>` Lit web component for reacting to the
   article/thread itself.
 
@@ -94,7 +95,7 @@ Domain vocabulary is fixed in [`CONTEXT.md`](CONTEXT.md) — use those exact ter
 | `packages/renderer` | `@koe/renderer` | Markdown → sanitized HTML via `remark` + `rehype-sanitize`. |
 | `packages/server` | `@koe/server` | Fastify REST API. Routes in `src/routes/`, shared plugins in `src/plugins/`. |
 | `packages/sdk` | `@koe/sdk` | Typed client wrapping the REST API; validates responses with `@koe/core`; exposes the pluggable media provider abstraction. |
-| `packages/widget` | `@koe/widget` | `<koe-comments>` Lit web component. |
+| `packages/widget` | `@koe/widget` | `<koe-comments>` and `<koe-article-reactions>` Lit web components. |
 | `apps/admin` | `@koe/admin` | React + Vite + Material UI admin SPA, served by `@koe/server` at `/admin`. |
 | `apps/demo` | `@koe/demo` | Self-contained demo: PGlite DB + server + bundled widget + SDK walkthrough. |
 
@@ -367,10 +368,13 @@ yourself to target another host; no server-side storage is involved.
 | `reaction-emojis` | Comma-separated allowlist override for the picker. |
 | `gif-api-key` | Optional Giphy key; without it the GIF picker only accepts pasted image URLs. |
 | `media-api-key` | Optional imgbb API key; when set, the composer shows an image upload button. |
+| `theme` | Reactive `light` \| `dark` property/attribute (default `light`). Reflects the host's design system. |
+| `show-theme-toggle` | Boolean. Shows the built-in theme toggle (hidden by default so the host owns the theme). |
 
 The widget handles guest auth automatically (token cached in `localStorage` under
-`koe_access_token`, refreshed on `401`), persists theme under `koe_theme`, and
-emits/listens for `koe-theme-change` to sync light/dark with the host page.
+`koe_access_token`, refreshed on `401`). The host owns the theme: set the
+reactive `theme` property/attribute, and the built-in toggle stays hidden unless
+you opt in with `show-theme-toggle`.
 
 Image upload is client-side: selecting a file — or pasting an image from the
 clipboard — posts it directly to imgbb with the `media-api-key` and inserts
@@ -386,8 +390,8 @@ button reads "Reported" and disables.
 
 `<koe-article-reactions>` is a standalone element that renders an inline row of
 allowed emoji buttons with counts for the article/thread itself. It shares the
-same guest session (`koe_access_token`) and theme (`koe_theme`) as
-`<koe-comments>`, so the two can sit on the same page.
+same guest session (`koe_access_token`) and the same `theme`/`--koe-*` contract
+as `<koe-comments>`, so the two can sit on the same page.
 
 ```html
 <koe-article-reactions
@@ -402,9 +406,72 @@ same guest session (`koe_access_token`) and theme (`koe_theme`) as
 | `base-url` | API base URL. Empty means same-origin. |
 | `thread-ref` | Opaque `externalRef` of the thread to react to. |
 | `reaction-emojis` | Comma-separated allowlist override for the buttons. |
+| `theme` | Reactive `light` \| `dark` property/attribute (default `light`). |
 
 Clicking a button toggles the caller's reaction and re-renders the count; the
 button is highlighted while the caller's reaction is active.
+
+### Theming
+
+Both widgets style themselves through a documented contract, so a host can fully
+reskin them from its own design system without patching the widget source
+(see [`docs/adr/0002`](docs/adr/0002-themeable-widget-contract.md)). Set the
+semantic custom properties on the element, target `::part(...)` hooks for
+structural overrides, and project content into the named `<slot>`s.
+
+```css
+koe-comments,
+koe-article-reactions {
+  --koe-surface: #ffffff;
+  --koe-text: #111827;
+  --koe-accent: #7c3aed;
+  --koe-border: #e5e7eb;
+  --koe-radius-lg: 0.25rem;
+  --koe-font: "Inter", system-ui, sans-serif;
+}
+
+koe-comments::part(comment) {
+  padding-block: 1rem;
+  border-bottom: 1px solid var(--koe-border);
+}
+```
+
+#### `--koe-*` tokens
+
+| Group | Tokens |
+| --- | --- |
+| Surface | `--koe-surface`, `--koe-surface-muted`, `--koe-surface-sunken`, `--koe-surface-strong`, `--koe-skeleton` |
+| Text | `--koe-text`, `--koe-text-muted`, `--koe-text-subtle`, `--koe-text-inverse` |
+| Accent | `--koe-accent`, `--koe-accent-soft`, `--koe-accent-contrast` |
+| Border | `--koe-border`, `--koe-border-strong`, `--koe-focus-ring` |
+| Danger | `--koe-danger`, `--koe-danger-soft`, `--koe-danger-border`, `--koe-danger-contrast` |
+| Warning | `--koe-warning`, `--koe-warning-soft` |
+| Brand | `--koe-gif-from`, `--koe-gif-to` |
+| Thread lines | `--koe-thread-line-0` … `--koe-thread-line-3` |
+| Typography | `--koe-font`, `--koe-font-mono` |
+| Radius | `--koe-radius-sm`, `--koe-radius-md`, `--koe-radius-lg`, `--koe-radius-xl`, `--koe-radius-2xl`, `--koe-radius-full` (names match the `rounded-*` scale they drive) |
+| Spacing | `--koe-space` (base unit; every Tailwind spacing utility is a multiple) |
+
+#### `::part` hooks
+
+`<koe-comments>`: `root`, `header`, `title`, `count`, `error`, `composer`,
+`composer-shell`, `toolbar`, `toolbar-button`, `toolbar-gif`, `toolbar-upload`,
+`textarea`, `composer-actions`, `cancel`, `submit`, `gif-picker`, `gif-search`,
+`gif-grid`, `gif-url`, `gif-insert`, `gif-close`, `loading`, `empty`,
+`empty-title`, `empty-text`, `list`, `comment`, `avatar`, `author`, `time`,
+`pending-badge`, `body`, `actions`, `vote-controls`, `vote-up`, `vote-down`,
+`vote-score`, `reactions`, `reaction`, `reaction-count`, `reactions-toggle`,
+`add-reaction`, `reaction-picker`, `reaction-picker-button`, `report-button`,
+`report-picker`, `report-input`, `report-cancel`, `report-submit`,
+`reply-composer`, `reply-button`, `thread-toggle`, `nested-list`, `theme-toggle`.
+
+`<koe-article-reactions>`: `root`, `error`, `loading`, `group`, `reaction`,
+`reaction-count`.
+
+#### `<slot>`s
+
+- `<koe-comments>`: `header`, `empty`, `footer`.
+- `<koe-article-reactions>`: `label`, `footer`.
 
 ## Development
 
@@ -459,7 +526,7 @@ lands, update it as follows.
 - **Features:** add a bullet for client-side draft autosave.
 - **Web component:** document that in-progress drafts are persisted to
   `localStorage`, keyed by thread and parent comment, and cleared on successful
-  submit. Note any new storage keys alongside `koe_access_token`/`koe_theme`.
+  submit. Note any new storage keys alongside `koe_access_token`.
 
 ### 19 — Extensibility: Event Bus & Webhooks
 

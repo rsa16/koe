@@ -12,11 +12,8 @@ import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { tailwindStyles } from "./generated/tailwind.styles.js";
 import {
   ACCESS_TOKEN_KEY,
-  detectPreferredTheme,
   ensureGuestSession,
-  readStoredTheme,
   runWithAuthRetry,
-  THEME_KEY,
 } from "./session.js";
 
 const COMPOSER_SCOPE = "composer";
@@ -139,6 +136,12 @@ export class KoeComments extends LitElement {
   @property({ type: String, attribute: "media-api-key" })
   mediaApiKey = "";
 
+  @property({ type: String, reflect: true })
+  theme: "light" | "dark" = "light";
+
+  @property({ type: Boolean, attribute: "show-theme-toggle" })
+  showThemeToggle = false;
+
   @state() private comments: CommentNode[] = [];
   @state() private threadId = "";
   @state() private loading = true;
@@ -153,7 +156,6 @@ export class KoeComments extends LitElement {
   @state() private collapsedThreads: Set<string> = new Set();
   @state() private openReactionPicker: string | null = null;
   @state() private error = "";
-  @state() private theme: "light" | "dark" = "light";
   @state() private activeScope: string | null = null;
   @state() private openGifPicker: string | null = null;
   @state() private gifQuery = "";
@@ -184,8 +186,6 @@ export class KoeComments extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
-    this.initTheme();
-    window.addEventListener("koe-theme-change", this.handleExternalThemeChange);
     if (this.threadRef) {
       const effectiveBaseUrl =
         this.baseUrl ||
@@ -197,10 +197,6 @@ export class KoeComments extends LitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback();
-    window.removeEventListener(
-      "koe-theme-change",
-      this.handleExternalThemeChange
-    );
     window.clearTimeout(this.gifDebounce);
     this.gifAbort?.abort();
   }
@@ -213,27 +209,8 @@ export class KoeComments extends LitElement {
     }
   }
 
-  private handleExternalThemeChange = (e: Event) => {
-    const theme = (e as CustomEvent<{ theme?: string }>).detail?.theme;
-    if (theme === "light" || theme === "dark") {
-      this.theme = theme;
-    }
-  };
-
-  private initTheme() {
-    this.theme = readStoredTheme(localStorage) ?? detectPreferredTheme();
-  }
-
-  setTheme(theme: "light" | "dark") {
-    this.theme = theme;
-    localStorage.setItem(THEME_KEY, theme);
-    window.dispatchEvent(
-      new CustomEvent("koe-theme-change", { detail: { theme } })
-    );
-  }
-
   private toggleTheme() {
-    this.setTheme(this.theme === "dark" ? "light" : "dark");
+    this.theme = this.theme === "dark" ? "light" : "dark";
   }
 
   setMediaProvider(provider: MediaProvider | null) {
@@ -768,7 +745,8 @@ export class KoeComments extends LitElement {
     const emoji = composer ? "🙂" : avatarEmoji(seed);
     return html`
       <div
-        class="koe-avatar flex h-9 w-9 shrink-0 select-none items-center justify-center rounded-full border border-slate-200 bg-gradient-to-br from-slate-50 to-slate-200 text-lg leading-none shadow-sm dark:border-slate-700 dark:from-slate-800 dark:to-slate-700"
+        part="avatar"
+        class="koe-avatar flex h-9 w-9 shrink-0 select-none items-center justify-center rounded-full border border-koe-border bg-gradient-to-br from-koe-surface-muted to-koe-skeleton text-lg leading-none shadow-sm"
         aria-hidden="true"
       >
         <span>${emoji}</span>
@@ -780,42 +758,54 @@ export class KoeComments extends LitElement {
     const total = this.countAll(this.comments);
     return html`
       <section
-        class="koe-comments font-sans antialiased ${this.theme === "dark"
-          ? "dark"
-          : ""}"
+        part="root"
+        class="koe-comments font-sans antialiased"
         style="color-scheme: ${this.theme};"
       >
-        <div class="mb-5 flex items-center justify-between gap-3">
-          <h3
-            class="flex items-baseline gap-2 text-xl font-bold tracking-tight text-slate-900 dark:text-white"
-          >
-            Comments
-            ${total > 0
-              ? html`<span
-                  class="text-sm font-medium text-slate-400 dark:text-slate-500"
+        <div part="header" class="mb-5 flex items-center justify-between gap-3">
+          <slot name="header">
+            <h3
+              part="title"
+              class="flex items-baseline gap-2 text-xl font-bold tracking-tight text-koe-text"
+            >
+              Comments
+              ${total > 0
+                ? html`<span
+                    part="count"
+                    class="text-sm font-medium text-koe-text-subtle"
+                  >
+                    ${total}
+                  </span>`
+                : nothing}
+            </h3>
+          </slot>
+          ${this.showThemeToggle
+            ? html`
+                <button
+                  type="button"
+                  part="theme-toggle"
+                  class="theme-toggle inline-flex h-9 w-9 items-center justify-center rounded-full border border-koe-border bg-koe-surface text-koe-text-muted shadow-sm transition-all hover:rotate-12 hover:text-koe-text"
+                  aria-label=${this.theme === "dark"
+                    ? "Switch to light mode"
+                    : "Switch to dark mode"}
+                  title=${this.theme === "dark"
+                    ? "Switch to light mode"
+                    : "Switch to dark mode"}
+                  @click=${this.toggleTheme}
                 >
-                  ${total}
-                </span>`
-              : nothing}
-          </h3>
-          <button
-            type="button"
-            class="theme-toggle inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition-all hover:rotate-12 hover:text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
-            aria-label=${this.theme === "dark"
-              ? "Switch to light mode"
-              : "Switch to dark mode"}
-            title=${this.theme === "dark"
-              ? "Switch to light mode"
-              : "Switch to dark mode"}
-            @click=${this.toggleTheme}
-          >
-            ${this.icon(this.theme === "dark" ? ICON_PATHS.sun : ICON_PATHS.moon, "h-[18px] w-[18px]")}
-          </button>
+                  ${this.icon(
+                    this.theme === "dark" ? ICON_PATHS.sun : ICON_PATHS.moon,
+                    "h-[18px] w-[18px]"
+                  )}
+                </button>
+              `
+            : nothing}
         </div>
 
         ${this.error
           ? html`<p
-              class="error pop-in mb-4 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-400"
+              part="error"
+              class="error pop-in mb-4 flex items-center gap-2 rounded-xl border border-koe-danger-border bg-koe-danger-soft px-3 py-2 text-sm text-koe-danger"
               role="alert"
             >
               ${this.icon(ICON_PATHS.alert, "h-4 w-4 shrink-0")}
@@ -823,7 +813,7 @@ export class KoeComments extends LitElement {
             </p>`
           : nothing}
 
-        <form class="composer mb-8" @submit=${this.handleSubmit}>
+        <form part="composer" class="composer mb-8" @submit=${this.handleSubmit}>
           ${this.renderComposer({
             scope: COMPOSER_SCOPE,
             placeholder: "What are your thoughts?",
@@ -838,26 +828,23 @@ export class KoeComments extends LitElement {
         </form>
 
         ${this.loading ? this.renderLoading() : this.renderCommentList()}
+        <slot name="footer"></slot>
       </section>
     `;
   }
 
   private renderLoading(): TemplateResult {
     return html`
-      <div class="space-y-5" aria-busy="true">
+      <div part="loading" class="space-y-5" aria-busy="true">
         ${[1, 2, 3].map(
           () => html`
             <div class="flex animate-pulse gap-3">
               <div
-                class="h-8 w-8 shrink-0 rounded-full bg-slate-200 dark:bg-slate-800"
+                class="h-8 w-8 shrink-0 rounded-full bg-koe-skeleton"
               ></div>
               <div class="flex-1 space-y-2 py-1">
-                <div
-                  class="h-3 w-1/4 rounded-full bg-slate-200 dark:bg-slate-800"
-                ></div>
-                <div
-                  class="h-3 w-3/4 rounded-full bg-slate-200 dark:bg-slate-800"
-                ></div>
+                <div class="h-3 w-1/4 rounded-full bg-koe-skeleton"></div>
+                <div class="h-3 w-3/4 rounded-full bg-koe-skeleton"></div>
               </div>
             </div>
           `
@@ -868,23 +855,27 @@ export class KoeComments extends LitElement {
 
   private renderCommentList(): TemplateResult {
     return html`
-      <ul class="comment-list comment-list--root">
+      <ul part="list" class="comment-list comment-list--root">
         ${this.comments.map((comment) => this.renderComment(comment))}
       </ul>
       ${this.comments.length === 0
         ? html`
             <div
-              class="empty rounded-2xl border border-dashed border-slate-300 px-6 py-12 text-center dark:border-slate-700"
+              part="empty"
+              class="empty rounded-2xl border border-dashed border-koe-border-strong px-6 py-12 text-center"
             >
-              <div class="mb-3 text-3xl" aria-hidden="true">💬</div>
-              <p
-                class="text-sm font-semibold text-slate-600 dark:text-slate-300"
-              >
-                No comments yet
-              </p>
-              <p class="mt-1 text-xs text-slate-400 dark:text-slate-500">
-                Be the first to share your thoughts.
-              </p>
+              <slot name="empty">
+                <div class="mb-3 text-3xl" aria-hidden="true">💬</div>
+                <p
+                  part="empty-title"
+                  class="text-sm font-semibold text-koe-text-muted"
+                >
+                  No comments yet
+                </p>
+                <p part="empty-text" class="mt-1 text-xs text-koe-text-subtle">
+                  Be the first to share your thoughts.
+                </p>
+              </slot>
             </div>
           `
         : nothing}
@@ -898,9 +889,10 @@ export class KoeComments extends LitElement {
       <div class="flex gap-3">
         ${this.avatar("composer", true)}
         <div
-          class="composer-shell relative min-w-0 flex-1 rounded-2xl border bg-white transition-all duration-200 dark:bg-slate-900 ${active
-            ? "border-slate-300 shadow-sm ring-4 ring-slate-900/5 dark:border-slate-600 dark:ring-white/5"
-            : "border-slate-200 hover:border-slate-300 dark:border-slate-700 dark:hover:border-slate-600"}"
+          part="composer-shell"
+          class="composer-shell relative min-w-0 flex-1 rounded-2xl border bg-koe-surface transition-all duration-200 ${active
+            ? "border-koe-border-strong shadow-sm ring-4 ring-[var(--koe-focus-ring)]"
+            : "border-koe-border hover:border-koe-border-strong"}"
         >
           <input
             type="file"
@@ -911,10 +903,11 @@ export class KoeComments extends LitElement {
           />
           ${active ? this.renderToolbar(scope) : nothing}
           <textarea
+            part="textarea"
             rows=${options.rows}
             data-scope=${scope}
             placeholder=${options.placeholder}
-            class="block w-full resize-y border-0 bg-transparent px-4 py-3 text-sm leading-relaxed text-slate-900 placeholder:text-slate-400 focus:outline-none dark:text-slate-100 dark:placeholder:text-slate-500"
+            class="block w-full resize-y border-0 bg-transparent px-4 py-3 text-sm leading-relaxed text-koe-text placeholder:text-koe-text-subtle focus:outline-none"
             .value=${options.draft}
             @input=${options.onInput}
             @paste=${(e: ClipboardEvent) => this.handlePaste(scope, e)}
@@ -924,10 +917,11 @@ export class KoeComments extends LitElement {
           ${active
             ? html`
                 <div
+                  part="composer-actions"
                   class="flex items-center justify-between gap-2 px-3 pb-3 pt-1"
                 >
                   <span
-                    class="hidden text-xs text-slate-400 sm:inline dark:text-slate-500"
+                    class="hidden text-xs text-koe-text-subtle sm:inline"
                   >
                     Markdown supported
                   </span>
@@ -936,7 +930,8 @@ export class KoeComments extends LitElement {
                       ? html`
                           <button
                             type="button"
-                            class="rounded-full px-3 py-1.5 text-sm font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                            part="cancel"
+                            class="rounded-full px-3 py-1.5 text-sm font-medium text-koe-text-muted transition-colors hover:bg-koe-surface-sunken hover:text-koe-text"
                             @click=${options.onCancel}
                           >
                             Cancel
@@ -945,7 +940,8 @@ export class KoeComments extends LitElement {
                       : nothing}
                     <button
                       type="submit"
-                      class="rounded-full bg-slate-900 px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-900/40 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200 dark:focus-visible:ring-white/40"
+                      part="submit"
+                      class="rounded-full bg-koe-surface-strong px-4 py-1.5 text-sm font-semibold text-koe-text-inverse shadow-sm transition-all hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-koe-accent-soft disabled:cursor-not-allowed disabled:opacity-40"
                       ?disabled=${options.submitting || !options.draft.trim()}
                     >
                       ${options.submitting
@@ -966,10 +962,12 @@ export class KoeComments extends LitElement {
     const preventFocus = (e: Event) => e.preventDefault();
     return html`
       <div
-        class="composer-toolbar flex flex-wrap items-center gap-0.5 border-b border-slate-100 px-2 py-1.5 dark:border-slate-800"
+        part="toolbar"
+        class="composer-toolbar flex flex-wrap items-center gap-0.5 border-b border-koe-border px-2 py-1.5"
       >
         <button
           type="button"
+          part="toolbar-button"
           class="toolbar-button"
           aria-label="Bold"
           title="Bold"
@@ -980,6 +978,7 @@ export class KoeComments extends LitElement {
         </button>
         <button
           type="button"
+          part="toolbar-button"
           class="toolbar-button"
           aria-label="Italic"
           title="Italic"
@@ -990,6 +989,7 @@ export class KoeComments extends LitElement {
         </button>
         <button
           type="button"
+          part="toolbar-button"
           class="toolbar-button"
           aria-label="Strikethrough"
           title="Strikethrough"
@@ -1000,11 +1000,12 @@ export class KoeComments extends LitElement {
           <span class="text-sm line-through">S</span>
         </button>
         <span
-          class="mx-1 h-5 w-px bg-slate-200 dark:bg-slate-700"
+          class="mx-1 h-5 w-px bg-koe-border"
           aria-hidden="true"
         ></span>
         <button
           type="button"
+          part="toolbar-button"
           class="toolbar-button"
           aria-label="Quote"
           title="Quote"
@@ -1015,6 +1016,7 @@ export class KoeComments extends LitElement {
         </button>
         <button
           type="button"
+          part="toolbar-button"
           class="toolbar-button"
           aria-label="Code"
           title="Code"
@@ -1025,6 +1027,7 @@ export class KoeComments extends LitElement {
         </button>
         <button
           type="button"
+          part="toolbar-button"
           class="toolbar-button"
           aria-label="Link"
           title="Link"
@@ -1034,14 +1037,15 @@ export class KoeComments extends LitElement {
           ${this.icon(ICON_PATHS.link)}
         </button>
         <span
-          class="mx-1 h-5 w-px bg-slate-200 dark:bg-slate-700"
+          class="mx-1 h-5 w-px bg-koe-border"
           aria-hidden="true"
         ></span>
         <button
           type="button"
-          class="gif-button flex h-8 items-center justify-center gap-1.5 rounded-lg px-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100 ${this
+          part="toolbar-gif"
+          class="gif-button flex h-8 items-center justify-center gap-1.5 rounded-lg px-2 text-koe-text-muted transition-colors hover:bg-koe-surface-sunken hover:text-koe-text ${this
             .openGifPicker === scope
-            ? "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-100"
+            ? "bg-koe-surface-sunken text-koe-text"
             : ""}"
           aria-label="Insert image or GIF"
           title="Insert image or GIF"
@@ -1053,7 +1057,7 @@ export class KoeComments extends LitElement {
         >
           ${this.icon(ICON_PATHS.image)}
           <span
-            class="rounded bg-gradient-to-r from-fuchsia-500 to-pink-500 px-1.5 py-0.5 text-[10px] font-extrabold leading-none text-white"
+            class="rounded-md bg-gradient-to-r from-koe-gif-from to-koe-gif-to px-1.5 py-0.5 text-[10px] font-extrabold leading-none text-koe-accent-contrast"
           >
             GIF
           </span>
@@ -1062,7 +1066,8 @@ export class KoeComments extends LitElement {
           ? html`
               <button
                 type="button"
-                class="media-upload-button flex h-8 items-center justify-center gap-1.5 rounded-lg px-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                part="toolbar-upload"
+                class="media-upload-button flex h-8 items-center justify-center gap-1.5 rounded-lg px-2 text-koe-text-muted transition-colors hover:bg-koe-surface-sunken hover:text-koe-text disabled:cursor-not-allowed disabled:opacity-50"
                 aria-label="Upload image"
                 title=${this.uploadingScope === scope
                   ? "Uploading..."
@@ -1086,16 +1091,18 @@ export class KoeComments extends LitElement {
   private renderGifPicker(scope: string): TemplateResult {
     return html`
       <div
-        class="gif-picker pop-in absolute right-2 top-full z-20 mt-2 w-80 max-w-[calc(100vw-4rem)] rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-xl backdrop-blur-sm dark:border-slate-700 dark:bg-slate-900/95"
+        part="gif-picker"
+        class="gif-picker pop-in absolute right-2 top-full z-20 mt-2 w-80 max-w-[calc(100vw-4rem)] rounded-2xl border border-koe-border bg-koe-surface p-3 shadow-xl backdrop-blur-sm"
       >
         <div class="mb-2 flex items-center justify-between">
           <span
-            class="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500"
+            class="text-xs font-semibold uppercase tracking-wide text-koe-text-subtle"
           >
             Image / GIF
           </span>
           <button
             type="button"
+            part="gif-close"
             class="toolbar-button !h-6 !w-6"
             aria-label="Close image picker"
             @click=${this.closeGifPicker}
@@ -1107,7 +1114,8 @@ export class KoeComments extends LitElement {
           ? html`
               <input
                 type="text"
-                class="mb-2 w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-100 dark:placeholder:text-slate-500"
+                part="gif-search"
+                class="mb-2 w-full rounded-lg border border-koe-border bg-koe-surface-muted px-2.5 py-1.5 text-xs text-koe-text placeholder:text-koe-text-subtle focus:border-koe-accent focus:outline-none"
                 placeholder="Search Giphy..."
                 .value=${this.gifQuery}
                 @input=${(e: Event) =>
@@ -1116,23 +1124,24 @@ export class KoeComments extends LitElement {
                   )}
               />
               <div
+                part="gif-grid"
                 class="gif-grid mb-2 grid max-h-56 grid-cols-3 gap-2 overflow-y-auto"
               >
                 ${this.gifLoading
                   ? html`<p
-                      class="col-span-3 py-6 text-center text-xs text-slate-400"
+                      class="col-span-3 py-6 text-center text-xs text-koe-text-subtle"
                     >
                       Loading GIFs...
                     </p>`
                   : this.gifError
                     ? html`<p
-                        class="col-span-3 py-6 text-center text-xs text-red-500"
+                        class="col-span-3 py-6 text-center text-xs text-koe-danger"
                       >
                         ${this.gifError}
                       </p>`
                     : this.gifResults.length === 0
                       ? html`<p
-                          class="col-span-3 py-6 text-center text-xs text-slate-400"
+                          class="col-span-3 py-6 text-center text-xs text-koe-text-subtle"
                         >
                           No GIFs found.
                         </p>`
@@ -1141,13 +1150,13 @@ export class KoeComments extends LitElement {
                             src=${url}
                             alt="GIF option"
                             loading="lazy"
-                            class="h-20 w-full cursor-pointer rounded-lg bg-slate-100 object-cover transition-opacity hover:opacity-75 dark:bg-slate-800"
+                            class="h-20 w-full cursor-pointer rounded-lg bg-koe-surface-sunken object-cover transition-opacity hover:opacity-75"
                             @click=${() => this.insertGif(scope, url)}
                           />`
                         )}
               </div>
             `
-          : html`<p class="mb-2 text-xs text-slate-400 dark:text-slate-500">
+          : html`<p class="mb-2 text-xs text-koe-text-subtle">
               Paste an image URL below, or set the
               <code class="font-mono">gif-api-key</code> attribute to search
               Giphy.
@@ -1155,7 +1164,8 @@ export class KoeComments extends LitElement {
         <div class="flex gap-2">
           <input
             type="text"
-            class="min-w-0 flex-1 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-100 dark:placeholder:text-slate-500"
+            part="gif-url"
+            class="min-w-0 flex-1 rounded-lg border border-koe-border bg-koe-surface-muted px-2.5 py-1.5 text-xs text-koe-text placeholder:text-koe-text-subtle focus:border-koe-accent focus:outline-none"
             placeholder="https://example.com/image.gif"
             .value=${this.gifUrl}
             @input=${(e: Event) =>
@@ -1170,7 +1180,8 @@ export class KoeComments extends LitElement {
           />
           <button
             type="button"
-            class="shrink-0 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
+            part="gif-insert"
+            class="shrink-0 rounded-lg bg-koe-surface-strong px-3 py-1.5 text-xs font-semibold text-koe-text-inverse transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
             ?disabled=${!this.gifUrl.trim()}
             @click=${() => void this.insertCustomGif(scope)}
           >
@@ -1180,7 +1191,7 @@ export class KoeComments extends LitElement {
         ${this.gifError && this.gifApiKey
           ? nothing
           : this.gifError
-            ? html`<p class="mt-1.5 text-xs text-red-500">${this.gifError}</p>`
+            ? html`<p class="mt-1.5 text-xs text-koe-danger">${this.gifError}</p>`
             : nothing}
       </div>
     `;
@@ -1189,18 +1200,20 @@ export class KoeComments extends LitElement {
   private renderReportPicker(commentId: string): TemplateResult {
     return html`
       <div
-        class="report-picker pop-in mt-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-900"
+        part="report-picker"
+        class="report-picker pop-in mt-3 rounded-2xl border border-koe-border bg-koe-surface p-3 shadow-sm"
       >
         <label
-          class="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500"
+          class="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-koe-text-subtle"
           for="report-reason-${commentId}"
         >
           Report this comment
         </label>
         <textarea
           id="report-reason-${commentId}"
+          part="report-input"
           rows="2"
-          class="report-reason-input block w-full resize-y rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-400 focus:outline-none dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-100 dark:placeholder:text-slate-500"
+          class="report-reason-input block w-full resize-y rounded-xl border border-koe-border bg-koe-surface-muted px-3 py-2 text-sm text-koe-text placeholder:text-koe-text-subtle focus:border-koe-border-strong focus:outline-none"
           placeholder="Why are you reporting this comment?"
           .value=${this.reportReason}
           @input=${(e: Event) =>
@@ -1209,14 +1222,16 @@ export class KoeComments extends LitElement {
         <div class="mt-2 flex justify-end gap-2">
           <button
             type="button"
-            class="rounded-full px-3 py-1.5 text-sm font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+            part="report-cancel"
+            class="rounded-full px-3 py-1.5 text-sm font-medium text-koe-text-muted transition-colors hover:bg-koe-surface-sunken hover:text-koe-text"
             @click=${this.closeReportPicker}
           >
             Cancel
           </button>
           <button
             type="button"
-            class="report-submit rounded-full bg-red-600 px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-red-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40 disabled:cursor-not-allowed disabled:opacity-40"
+            part="report-submit"
+            class="report-submit rounded-full bg-koe-danger px-4 py-1.5 text-sm font-semibold text-koe-danger-contrast shadow-sm transition-all hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-koe-danger-soft disabled:cursor-not-allowed disabled:opacity-40"
             ?disabled=${this.reporting || !this.reportReason.trim()}
             @click=${() => this.submitReport(commentId)}
           >
@@ -1238,41 +1253,51 @@ export class KoeComments extends LitElement {
     const reported = this.reportedComments.has(comment.id);
     const childCount = comment.children.length;
     return html`
-      <li class="comment">
+      <li part="comment" class="comment">
         <div class="flex gap-3">
           ${this.avatar(comment.authorId)}
           <div class="min-w-0 flex-1">
             <div class="mb-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
               <span
-                class="text-sm font-semibold text-slate-900 dark:text-white"
+                part="author"
+                class="text-sm font-semibold text-koe-text"
               >
                 Guest
               </span>
-              <span class="text-slate-300 dark:text-slate-600" aria-hidden="true"
+              <span class="text-koe-border-strong" aria-hidden="true"
                 >·</span
               >
               <time
-                class="comment-time text-xs text-slate-400 dark:text-slate-500"
+                part="time"
+                class="comment-time text-xs text-koe-text-subtle"
                 datetime=${createdAt.toISOString()}
                 title=${createdAt.toLocaleString()}
               >
                 ${formatRelativeTime(createdAt)}
               </time>
               ${comment.status === "pending"
-                ? html`<span class="pending-badge">Pending approval</span>`
+                ? html`<span part="pending-badge" class="pending-badge"
+                    >Pending approval</span
+                  >`
                 : nothing}
             </div>
             <div
-              class="comment-body prose prose-sm prose-slate max-w-none dark:prose-invert"
+              part="body"
+              class="comment-body prose prose-sm max-w-none"
             >${unsafeHTML(comment.bodyHtml)}</div>
 
-            <div class="comment-actions mt-2.5 flex flex-wrap items-center gap-2">
+            <div
+              part="actions"
+              class="comment-actions mt-2.5 flex flex-wrap items-center gap-2"
+            >
               <div
-                class="vote-controls inline-flex items-center overflow-hidden rounded-full border border-slate-200 dark:border-slate-700"
+                part="vote-controls"
+                class="vote-controls inline-flex items-center overflow-hidden rounded-full border border-koe-border"
               >
                 <button
                   type="button"
-                  class="vote-button flex h-8 w-8 items-center justify-center text-slate-400 transition-colors hover:bg-slate-50 hover:text-blue-600 disabled:opacity-50 dark:hover:bg-slate-800 dark:hover:text-blue-400 ${comment.userVote ===
+                  part="vote-up"
+                  class="vote-button flex h-8 w-8 items-center justify-center text-koe-text-subtle transition-colors hover:bg-koe-surface-sunken hover:text-koe-accent disabled:opacity-50 ${comment.userVote ===
                   1
                     ? "active up"
                     : ""}"
@@ -1283,13 +1308,15 @@ export class KoeComments extends LitElement {
                   ${this.icon(ICON_PATHS.chevronUp)}
                 </button>
                 <span
-                  class="vote-score min-w-6 text-center text-xs font-semibold tabular-nums text-slate-600 dark:text-slate-300"
+                  part="vote-score"
+                  class="vote-score min-w-6 text-center text-xs font-semibold tabular-nums text-koe-text-muted"
                 >
                   ${comment.upvotes - comment.downvotes}
                 </span>
                 <button
                   type="button"
-                  class="vote-button flex h-8 w-8 items-center justify-center text-slate-400 transition-colors hover:bg-slate-50 hover:text-red-600 disabled:opacity-50 dark:hover:bg-slate-800 dark:hover:text-red-400 ${comment.userVote ===
+                  part="vote-down"
+                  class="vote-button flex h-8 w-8 items-center justify-center text-koe-text-subtle transition-colors hover:bg-koe-surface-sunken hover:text-koe-danger disabled:opacity-50 ${comment.userVote ===
                   -1
                     ? "active down"
                     : ""}"
@@ -1301,7 +1328,10 @@ export class KoeComments extends LitElement {
                 </button>
               </div>
 
-              <div class="reaction-list flex flex-wrap items-center gap-1.5">
+              <div
+                part="reactions"
+                class="reaction-list flex flex-wrap items-center gap-1.5"
+              >
                 ${shown.map(
                   ([emoji, count]) => {
                     const active =
@@ -1309,7 +1339,8 @@ export class KoeComments extends LitElement {
                     return html`
                       <button
                         type="button"
-                        class="reaction-button inline-flex items-center gap-1 rounded-full border border-slate-200 px-2.5 py-1 text-xs text-slate-600 transition-colors hover:border-slate-300 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:border-slate-600 ${active
+                        part="reaction"
+                        class="reaction-button inline-flex items-center gap-1 rounded-full border border-koe-border px-2.5 py-1 text-xs text-koe-text-muted transition-colors hover:border-koe-border-strong disabled:opacity-50 ${active
                           ? "active"
                           : ""}"
                         ?disabled=${this.reacting}
@@ -1319,7 +1350,8 @@ export class KoeComments extends LitElement {
                       >
                         <span>${emoji}</span>
                         <span
-                          class="reaction-count tabular-nums text-slate-400 dark:text-slate-500"
+                          part="reaction-count"
+                          class="reaction-count tabular-nums text-koe-text-subtle"
                         >
                           ${count}
                         </span>
@@ -1331,7 +1363,8 @@ export class KoeComments extends LitElement {
                   ? html`
                       <button
                         type="button"
-                        class="reactions-toggle inline-flex items-center rounded-full border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-500 transition-colors hover:border-slate-300 hover:text-slate-700 dark:border-slate-700 dark:text-slate-400 dark:hover:border-slate-600 dark:hover:text-slate-200"
+                        part="reactions-toggle"
+                        class="reactions-toggle inline-flex items-center rounded-full border border-koe-border px-2.5 py-1 text-xs font-medium text-koe-text-muted transition-colors hover:border-koe-border-strong hover:text-koe-text"
                         @click=${() => this.toggleReactions(comment.id)}
                       >
                         ${expanded ? "Show fewer" : `+${hiddenCount} more`}
@@ -1340,7 +1373,8 @@ export class KoeComments extends LitElement {
                   : nothing}
                 <button
                   type="button"
-                  class="add-reaction-button inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-400 transition-colors hover:border-slate-300 hover:text-slate-600 dark:border-slate-700 dark:hover:border-slate-600 dark:hover:text-slate-300"
+                  part="add-reaction"
+                  class="add-reaction-button inline-flex h-8 w-8 items-center justify-center rounded-full border border-koe-border text-koe-text-subtle transition-colors hover:border-koe-border-strong hover:text-koe-text-muted"
                   aria-label="Add reaction"
                   @click=${() => this.toggleReactionPicker(comment.id)}
                 >
@@ -1349,13 +1383,15 @@ export class KoeComments extends LitElement {
                 ${this.openReactionPicker === comment.id
                   ? html`
                       <div
-                        class="reaction-picker pop-in inline-flex flex-wrap gap-1 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg dark:border-slate-700 dark:bg-slate-900"
+                        part="reaction-picker"
+                        class="reaction-picker pop-in inline-flex flex-wrap gap-1 rounded-xl border border-koe-border bg-koe-surface p-1.5 shadow-lg"
                       >
                         ${this.emojis.map(
                           (emoji) => html`
                             <button
                               type="button"
-                              class="reaction-picker-button flex h-8 w-8 items-center justify-center rounded-lg text-base transition-colors hover:bg-slate-100 dark:hover:bg-slate-800"
+                              part="reaction-picker-button"
+                              class="reaction-picker-button flex h-8 w-8 items-center justify-center rounded-lg text-base transition-colors hover:bg-koe-surface-sunken"
                               aria-label=${`React with ${emoji}`}
                               @click=${() =>
                                 this.reactToComment(comment.id, emoji)}
@@ -1371,7 +1407,8 @@ export class KoeComments extends LitElement {
 
               <button
                 type="button"
-                class="report-button ml-auto inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-60 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                part="report-button"
+                class="report-button ml-auto inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium text-koe-text-muted transition-colors hover:bg-koe-surface-sunken hover:text-koe-text disabled:cursor-not-allowed disabled:opacity-60"
                 aria-label="Report comment"
                 title=${reported ? "Reported" : "Report"}
                 ?disabled=${reported}
@@ -1382,7 +1419,8 @@ export class KoeComments extends LitElement {
               </button>
               <button
                 type="button"
-                class="reply-button inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                part="reply-button"
+                class="reply-button inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium text-koe-text-muted transition-colors hover:bg-koe-surface-sunken hover:text-koe-text"
                 @click=${() => this.startReply(comment.id)}
               >
                 ${this.icon(ICON_PATHS.reply)}
@@ -1396,7 +1434,7 @@ export class KoeComments extends LitElement {
 
             ${comment.id === this.replyTo
               ? html`
-                  <div class="reply-composer pop-in mt-3">
+                  <div part="reply-composer" class="reply-composer pop-in mt-3">
                     <form
                       @submit=${this.handleReplySubmit}
                     >
@@ -1421,7 +1459,8 @@ export class KoeComments extends LitElement {
               ? html`
                   <button
                     type="button"
-                    class="thread-toggle mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 transition-colors hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+                    part="thread-toggle"
+                    class="thread-toggle mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-koe-text-muted transition-colors hover:text-koe-text"
                     @click=${() => this.toggleThread(comment.id)}
                   >
                     ${this.icon(
@@ -1435,6 +1474,7 @@ export class KoeComments extends LitElement {
                     ? nothing
                     : html`
                         <ul
+                          part="nested-list"
                           class="comment-list comment-list--nested thread-line mt-2 ml-2 space-y-3 pl-4"
                           style="border-color: var(--koe-thread-line-${depth % 4});"
                         >
