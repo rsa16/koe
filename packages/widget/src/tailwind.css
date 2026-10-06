@@ -2,11 +2,46 @@
 @plugin "@tailwindcss/typography";
 @source "./koe-comments.ts";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
+@keyframes koe-pop {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.pop-in {
+  animation: koe-pop 0.15s ease-out;
+}
+
 @layer components {
   :host {
     display: block;
     font-family: var(--koe-font, system-ui, sans-serif);
     color: var(--koe-text, #0f172a);
+  }
+
+  .koe-comments {
+    --koe-divider: #e5e7eb;
+    --koe-thread-line-0: #e5e7eb;
+    --koe-thread-line-1: #bae6fd;
+    --koe-thread-line-2: #ddd6fe;
+    --koe-thread-line-3: #a7f3d0;
+  }
+
+  .koe-comments.dark {
+    --koe-text: #e2e8f0;
+    --koe-divider: #1e293b;
+    --koe-thread-line-0: #334155;
+    --koe-thread-line-1: #075985;
+    --koe-thread-line-2: #5b21b6;
+    --koe-thread-line-3: #065f46;
+    color: var(--koe-text);
   }
 
   .comment-list {
@@ -15,9 +50,36 @@
     padding: 0;
   }
 
+  .comment-list--root > .comment + .comment {
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--koe-divider);
+  }
+
+  .thread-line {
+    border-left-width: 2px;
+    border-left-style: solid;
+  }
+
   .comment-body {
     white-space: pre-wrap;
     word-break: break-word;
+  }
+
+  .comment-body > :first-child {
+    margin-top: 0;
+  }
+
+  .comment-body > :last-child {
+    margin-bottom: 0;
+  }
+
+  .comment-body img {
+    display: inline-block;
+    height: auto;
+    max-width: min(320px, 100%);
+    border-radius: 0.75rem;
+    margin: 0.25rem 0;
   }
 
   .pending-badge {
@@ -32,20 +94,76 @@
     white-space: nowrap;
   }
 
-  .vote-button.active {
-    color: #2563eb;
-    background-color: #eff6ff;
-    font-weight: 700;
+  .dark .pending-badge {
+    color: #fcd34d;
+    background-color: rgb(251 191 36 / 0.12);
   }
 
-  .reaction-button.active {
-    color: #1d4ed8;
-    border-color: #93c5fd;
-    background-color: #eff6ff;
-    font-weight: 600;
+  .toolbar-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 0.5rem;
+    color: #64748b;
+    transition:
+      background-color 0.15s ease,
+      color 0.15s ease;
   }
 
-  .reaction-button.active .reaction-count {
-    color: #2563eb;
+  .toolbar-button:hover {
+    background-color: #f1f5f9;
+    color: #0f172a;
   }
+
+  .dark .toolbar-button {
+    color: #94a3b8;
+  }
+
+  .dark .toolbar-button:hover {
+    background-color: #1e293b;
+    color: #f1f5f9;
+  }
+}
+
+.vote-button.active.up {
+  color: #2563eb;
+  background-color: #eff6ff;
+}
+
+.dark .vote-button.active.up {
+  color: #60a5fa;
+  background-color: rgb(37 99 235 / 0.18);
+}
+
+.vote-button.active.down {
+  color: #dc2626;
+  background-color: #fef2f2;
+}
+
+.dark .vote-button.active.down {
+  color: #f87171;
+  background-color: rgb(220 38 38 / 0.18);
+}
+
+.reaction-button.active {
+  color: #1d4ed8;
+  border-color: #93c5fd;
+  background-color: #eff6ff;
+  font-weight: 600;
+}
+
+.reaction-button.active .reaction-count {
+  color: #2563eb;
+}
+
+.dark .reaction-button.active {
+  color: #93c5fd;
+  border-color: #1e40af;
+  background-color: rgb(37 99 235 / 0.18);
+}
+
+.dark .reaction-button.active .reaction-count {
+  color: #bfdbfe;
 }
