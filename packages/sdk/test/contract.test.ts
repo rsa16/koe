@@ -151,6 +151,55 @@ describe("Koe SDK Contract Tests", () => {
     expect(result.user.createdAt).toBeInstanceOf(Date);
   });
 
+  it("composes request URLs from a non-default apiPrefix", async () => {
+    const { fetchFn, calls } = mockFetch(() => ({
+      status: 200,
+      body: { accessToken: "access-token", user: guestUser },
+    }));
+    const client = createKoeClient({
+      baseUrl: "http://localhost:3000",
+      apiPrefix: "/api/comments/v1",
+      fetch: fetchFn,
+    });
+
+    await client.auth.anonymous();
+
+    expect(calls[0].url).toBe(
+      "http://localhost:3000/api/comments/v1/auth/anonymous"
+    );
+  });
+
+  it("normalises an apiPrefix without a leading slash or with a trailing slash", async () => {
+    const { fetchFn, calls } = mockFetch(() => ({ status: 200, body: thread }));
+    const client = createKoeClient({
+      baseUrl: "http://localhost:3000",
+      apiPrefix: "api/comments/v1/",
+      fetch: fetchFn,
+    });
+
+    await client.threads.getByRef("my-post");
+
+    expect(calls[0].url).toBe(
+      "http://localhost:3000/api/comments/v1/threads/by-ref/my-post"
+    );
+  });
+
+  it("falls back to the default prefix when apiPrefix is blank", async () => {
+    const { fetchFn, calls } = mockFetch(() => ({
+      status: 200,
+      body: { accessToken: "access-token", user: guestUser },
+    }));
+    const client = createKoeClient({
+      baseUrl: "http://localhost:3000",
+      apiPrefix: "   ",
+      fetch: fetchFn,
+    });
+
+    await client.auth.anonymous();
+
+    expect(calls[0].url).toBe("http://localhost:3000/api/v1/auth/anonymous");
+  });
+
   it("auth.me sends the bearer token and parses the user", async () => {
     const { fetchFn, calls } = mockFetch(() => ({ status: 200, body: guestUser }));
     const client = createKoeClient({ baseUrl: "http://localhost:3000/", fetch: fetchFn });

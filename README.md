@@ -332,6 +332,17 @@ const audit = await client.moderation.actions(adminToken);
 await client.moderation.ban(someUserId, adminToken);
 ```
 
+By default requests go to `baseUrl` + `/api/v1`. When a host mounts the public
+API under a namespaced path (for example a reverse proxy that rewrites
+`/api/comments/v1/*` to Koe's internal `/api/v1/*`), set `apiPrefix`:
+
+```ts
+const client = createKoeClient({
+  baseUrl: "http://localhost:3000",
+  apiPrefix: "/api/comments/v1",
+});
+```
+
 ### Media
 
 The SDK ships a pluggable media provider abstraction for client-side uploads:
@@ -364,6 +375,7 @@ yourself to target another host; no server-side storage is involved.
 | Attribute | Description |
 | --- | --- |
 | `base-url` | API base URL. Empty means same-origin. |
+| `api-base` | Optional API path prefix (default `/api/v1`). Set when the API is mounted under a namespaced path. |
 | `thread-ref` | Opaque `externalRef` of the thread to load. |
 | `reaction-emojis` | Comma-separated allowlist override for the picker. |
 | `gif-api-key` | Optional Giphy key; without it the GIF picker only accepts pasted image URLs. |
@@ -405,6 +417,7 @@ as `<koe-comments>`, so the two can sit on the same page.
 | Attribute | Description |
 | --- | --- |
 | `base-url` | API base URL. Empty means same-origin. |
+| `api-base` | Optional API path prefix (default `/api/v1`). Set when the API is mounted under a namespaced path. |
 | `thread-ref` | Opaque `externalRef` of the thread to react to. |
 | `reaction-emojis` | Comma-separated allowlist override for the buttons. |
 | `token` | Optional bearer access token owned by the host. When set, the widget never self-issues a guest session. |

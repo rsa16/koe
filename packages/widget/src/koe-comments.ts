@@ -124,6 +124,9 @@ export class KoeComments extends LitElement {
   @property({ type: String, attribute: "base-url" })
   baseUrl = "";
 
+  @property({ type: String, attribute: "api-base" })
+  apiBase = "";
+
   @property({ type: String, attribute: "thread-ref" })
   threadRef = "";
 
@@ -193,7 +196,10 @@ export class KoeComments extends LitElement {
       const effectiveBaseUrl =
         this.baseUrl ||
         (typeof window !== "undefined" ? window.location.origin : "");
-      this.client = createKoeClient({ baseUrl: effectiveBaseUrl });
+      this.client = createKoeClient({
+        baseUrl: effectiveBaseUrl,
+        apiPrefix: this.apiBase,
+      });
       this.auth = createAuthSession({
         client: this.client,
         storage: localStorage,

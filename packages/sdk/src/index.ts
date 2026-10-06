@@ -98,8 +98,22 @@ export class KoeApiError extends Error {
 
 export interface KoeClientOptions {
   baseUrl: string;
+  apiPrefix?: string;
   token?: string;
   fetch?: typeof globalThis.fetch;
+}
+
+const DEFAULT_API_PREFIX = "/api/v1";
+
+function normalizeApiPrefix(apiPrefix: string | undefined): string {
+  const prefix = apiPrefix?.trim();
+  if (!prefix || prefix === "/") {
+    return DEFAULT_API_PREFIX;
+  }
+  const withLeadingSlash = prefix.startsWith("/") ? prefix : `/${prefix}`;
+  return withLeadingSlash.endsWith("/")
+    ? withLeadingSlash.slice(0, -1)
+    : withLeadingSlash;
 }
 
 export interface KoeClient {
@@ -167,6 +181,7 @@ interface RequestOptions {
 
 function buildUrl(
   baseUrl: string,
+  apiPrefix: string | undefined,
   path: string,
   query?: Record<string, string | number | undefined>
 ): string {
@@ -178,10 +193,11 @@ function buildUrl(
       ? `${window.location.origin}/`
       : "http://localhost/";
 
-  const url = new URL(
-    path.startsWith("/") ? path.slice(1) : path,
-    normalizedBase
-  );
+  const prefix = normalizeApiPrefix(apiPrefix);
+  const relativePath = path.startsWith("/") ? path.slice(1) : path;
+  const fullPath = `${prefix.slice(1)}/${relativePath}`;
+
+  const url = new URL(fullPath, normalizedBase);
   if (query) {
     for (const [key, value] of Object.entries(query)) {
       if (value !== undefined) {
@@ -210,11 +226,14 @@ export function createKoeClient(options: KoeClientOptions): KoeClient {
       headers["content-type"] = "application/json";
     }
 
-    const response = await fetchFn(buildUrl(options.baseUrl, path, query), {
-      method,
-      headers,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    });
+    const response = await fetchFn(
+      buildUrl(options.baseUrl, options.apiPrefix, path, query),
+      {
+        method,
+        headers,
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+      }
+    );
 
     if (!response.ok) {
       let problem: Record<string, unknown> = {};
@@ -248,7 +267,7 @@ export function createKoeClient(options: KoeClientOptions): KoeClient {
     action: UserModerationActionVerb,
     token?: string
   ): Promise<User> {
-    return request(UserSchema, "/api/v1/moderation/actions", {
+    return request(UserSchema, "/moderation/actions", {
       method: "POST",
       body: { userId, action },
       token,
@@ -258,23 +277,23 @@ export function createKoeClient(options: KoeClientOptions): KoeClient {
   return {
     auth: {
       anonymous: () =>
-        request(AnonymousAuthResponseSchema, "/api/v1/auth/anonymous", {
+        request(AnonymousAuthResponseSchema, "/auth/anonymous", {
           method: "POST",
         }),
       me: (token) =>
-        request(UserSchema, "/api/v1/auth/me", { method: "GET", token }),
+        request(UserSchema, "/auth/me", { method: "GET", token }),
     },
     threads: {
       getByRef: (ref, query, token) =>
         request(
           ThreadResponseSchema,
-          `/api/v1/threads/by-ref/${encodeURIComponent(ref)}`,
+          `/threads/by-ref/${encodeURIComponent(ref)}`,
           { method: "GET", query, token }
         ),
       react: async (threadId, emoji, token) => {
         const result = await request(
           ReactionSchema,
-          `/api/v1/threads/${threadId}/reactions`,
+          `/threads/${threadId}/reactions`,
           { method: "POST", body: { emoji }, token }
         );
         return result ?? null;
@@ -282,7 +301,7 @@ export function createKoeClient(options: KoeClientOptions): KoeClient {
       unreact: async (threadId, emoji, token) => {
         await request(
           ReactionSchema,
-          `/api/v1/threads/${threadId}/reactions/${encodeURIComponent(emoji)}`,
+          `/threads/${threadId}/reactions/${encodeURIComponent(emoji)}`,
           { method: "DELETE", token }
         );
       },
@@ -291,11 +310,11 @@ export function createKoeClient(options: KoeClientOptions): KoeClient {
       list: (threadId, query, token) =>
         request(
           CommentListResponseSchema,
-          `/api/v1/threads/${threadId}/comments`,
+          `/threads/${threadId}/comments`,
           { method: "GET", query, token }
         ),
       create: (threadId, body, token) =>
-        request(CommentSchema, `/api/v1/threads/${threadId}/comments`, {
+        request(CommentSchema, `/threads/${threadId}/comments`, {
           method: "POST",
           body,
           token,
@@ -303,13 +322,13 @@ export function createKoeClient(options: KoeClientOptions): KoeClient {
       vote: async (commentId, value, token) => {
         const result = await request(
           VoteSchema,
-          `/api/v1/comments/${commentId}/vote`,
+          `/comments/${commentId}/vote`,
           { method: "POST", body: { value }, token }
         );
         return result ?? null;
       },
       unvote: async (commentId, token) => {
-        await request(VoteSchema, `/api/v1/comments/${commentId}/vote`, {
+        await request(VoteSchema, `/comments/${commentId}/vote`, {
           method: "DELETE",
           token,
         });
@@ -317,7 +336,7 @@ export function createKoeClient(options: KoeClientOptions): KoeClient {
       react: async (commentId, emoji, token) => {
         const result = await request(
           ReactionSchema,
-          `/api/v1/comments/${commentId}/reactions`,
+          `/comments/${commentId}/reactions`,
           { method: "POST", body: { emoji }, token }
         );
         return result ?? null;
@@ -325,12 +344,12 @@ export function createKoeClient(options: KoeClientOptions): KoeClient {
       unreact: async (commentId, emoji, token) => {
         await request(
           ReactionSchema,
-          `/api/v1/comments/${commentId}/reactions/${encodeURIComponent(emoji)}`,
+          `/comments/${commentId}/reactions/${encodeURIComponent(emoji)}`,
           { method: "DELETE", token }
         );
       },
       report: (commentId, reason, token) =>
-        request(ReportSchema, `/api/v1/comments/${commentId}/reports`, {
+        request(ReportSchema, `/comments/${commentId}/reports`, {
           method: "POST",
           body: { reason },
           token,
@@ -338,18 +357,18 @@ export function createKoeClient(options: KoeClientOptions): KoeClient {
     },
     moderation: {
       queue: (token) =>
-        request(ModerationQueueResponseSchema, "/api/v1/moderation/queue", {
+        request(ModerationQueueResponseSchema, "/moderation/queue", {
           method: "GET",
           token,
         }),
       actions: (token) =>
         request(
           ModerationActionListResponseSchema,
-          "/api/v1/moderation/actions",
+          "/moderation/actions",
           { method: "GET", token }
         ),
       act: (commentId, action, token) =>
-        request(CommentSchema, "/api/v1/moderation/actions", {
+        request(CommentSchema, "/moderation/actions", {
           method: "POST",
           body: { commentId, action },
           token,

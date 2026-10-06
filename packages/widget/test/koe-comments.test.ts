@@ -706,6 +706,36 @@ describe("<koe-comments> widget", () => {
     expect(reportedButton.disabled).toBe(true);
   });
 
+  it("routes requests through a non-default api-base prefix", async () => {
+    const realFetch = globalThis.fetch;
+    const prefixedUrls: string[] = [];
+    globalThis.fetch = (async (input, init) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/api/comments/v1/")) {
+        prefixedUrls.push(url);
+        return realFetch(url.replace("/api/comments/v1/", "/api/v1/"), init);
+      }
+      return realFetch(input, init);
+    }) as typeof globalThis.fetch;
+
+    try {
+      const element = mount(
+        "widget-api-base",
+        `api-base="/api/comments/v1"`
+      );
+      await waitFor(
+        () => element.shadowRoot?.querySelector(".empty") !== null
+      );
+
+      expect(prefixedUrls.length).toBeGreaterThan(0);
+      expect(
+        prefixedUrls.every((url) => url.includes("/api/comments/v1/"))
+      ).toBe(true);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
   it("sources all styling from documented --koe-* tokens", () => {
     const cssText = KoeComments.styles.map((style) => style.cssText).join("\n");
     for (const token of [

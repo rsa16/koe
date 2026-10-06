@@ -282,6 +282,34 @@ describe("<koe-article-reactions> widget", () => {
     }
   });
 
+  it("routes requests through a non-default api-base prefix", async () => {
+    const realFetch = globalThis.fetch;
+    const prefixedUrls: string[] = [];
+    globalThis.fetch = (async (input, init) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/api/comments/v1/")) {
+        prefixedUrls.push(url);
+        return realFetch(url.replace("/api/comments/v1/", "/api/v1/"), init);
+      }
+      return realFetch(input, init);
+    }) as typeof globalThis.fetch;
+
+    try {
+      const element = mount(
+        "article-api-base",
+        `api-base="/api/comments/v1"`
+      );
+      await waitForButtons(element);
+
+      expect(prefixedUrls.length).toBeGreaterThan(0);
+      expect(
+        prefixedUrls.every((url) => url.includes("/api/comments/v1/"))
+      ).toBe(true);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
   it("sources all styling from documented --koe-* tokens", () => {
     const cssText = KoeArticleReactions.styles
       .map((style) => style.cssText)
