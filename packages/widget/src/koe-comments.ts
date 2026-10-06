@@ -525,6 +525,40 @@ export class KoeComments extends LitElement {
     if (!file) {
       return;
     }
+    await this.uploadAndInsert(scope, file);
+  }
+
+  private imageFromClipboard(clipboard: DataTransfer): File | null {
+    for (const item of Array.from(clipboard.items ?? [])) {
+      if (item.kind === "file" && item.type.startsWith("image/")) {
+        const file = item.getAsFile();
+        if (file) {
+          return file;
+        }
+      }
+    }
+    for (const file of Array.from(clipboard.files ?? [])) {
+      if (file.type.startsWith("image/")) {
+        return file;
+      }
+    }
+    return null;
+  }
+
+  private async handlePaste(scope: string, e: ClipboardEvent) {
+    const clipboard = e.clipboardData;
+    if (!clipboard) {
+      return;
+    }
+    const file = this.imageFromClipboard(clipboard);
+    if (!file) {
+      return;
+    }
+    e.preventDefault();
+    await this.uploadAndInsert(scope, file);
+  }
+
+  private async uploadAndInsert(scope: string, file: File) {
     if (!this.mediaProvider) {
       this.error = "Image upload is not configured";
       return;
@@ -865,6 +899,7 @@ export class KoeComments extends LitElement {
             class="block w-full resize-y border-0 bg-transparent px-4 py-3 text-sm leading-relaxed text-slate-900 placeholder:text-slate-400 focus:outline-none dark:text-slate-100 dark:placeholder:text-slate-500"
             .value=${options.draft}
             @input=${options.onInput}
+            @paste=${(e: ClipboardEvent) => this.handlePaste(scope, e)}
             @focus=${() => this.handleComposerFocus(scope)}
             @blur=${this.handleComposerBlur}
           ></textarea>

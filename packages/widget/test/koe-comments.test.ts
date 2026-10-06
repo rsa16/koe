@@ -139,6 +139,20 @@ describe("<koe-comments> widget", () => {
     input.dispatchEvent(new Event("change", { bubbles: true }));
   }
 
+  function pasteInto(
+    element: KoeComments,
+    clipboardData: { items: unknown[]; files: unknown[] }
+  ): Event {
+    const textarea = element.shadowRoot!.querySelector("textarea")!;
+    const paste = new Event("paste", {
+      bubbles: true,
+      cancelable: true,
+    }) as ClipboardEvent;
+    Object.defineProperty(paste, "clipboardData", { value: clipboardData });
+    textarea.dispatchEvent(paste);
+    return paste;
+  }
+
   it("authenticates anonymously and renders an empty comment list", async () => {
     const element = mount("widget-empty");
 
@@ -377,6 +391,55 @@ describe("<koe-comments> widget", () => {
     } finally {
       globalThis.fetch = realFetch;
     }
+  });
+
+  it("uploads an image pasted from the clipboard and inserts markdown", async () => {
+    const element = mount("widget-paste");
+    await waitFor(() => element.shadowRoot?.querySelector(".empty") !== null);
+
+    const uploads: Blob[] = [];
+    element.setMediaProvider({
+      upload: async (file) => {
+        uploads.push(file);
+        return { url: "https://i.ibb.co/paste/pic.png" };
+      },
+    });
+
+    const textarea = element.shadowRoot!.querySelector("textarea")!;
+    textarea.value = "Pasted: ";
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    await element.updateComplete;
+
+    const file = new File(["bytes"], "clip.png", { type: "image/png" });
+    const paste = pasteInto(element, {
+      items: [{ kind: "file", type: "image/png", getAsFile: () => file }],
+      files: [file],
+    });
+
+    await waitFor(() =>
+      (element.shadowRoot!.querySelector("textarea") as HTMLTextAreaElement).value.includes(
+        "![image](https://i.ibb.co/paste/pic.png)"
+      )
+    );
+
+    expect(uploads).toHaveLength(1);
+    expect(paste.defaultPrevented).toBe(true);
+  });
+
+  it("does not intercept a plain-text paste", async () => {
+    const element = mount("widget-paste-text");
+    await waitFor(() => element.shadowRoot?.querySelector(".empty") !== null);
+    element.setMediaProvider({
+      upload: async () => ({ url: "https://i.ibb.co/unused.png" }),
+    });
+
+    const paste = pasteInto(element, {
+      items: [{ kind: "string", type: "text/plain", getAsFile: () => null }],
+      files: [],
+    });
+    await element.updateComplete;
+
+    expect(paste.defaultPrevented).toBe(false);
   });
 
   it("shows the top three reactions with an expand toggle and an add button", async () => {

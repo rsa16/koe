@@ -5432,6 +5432,37 @@ var KoeComments = class extends i4 {
     if (!file) {
       return;
     }
+    await this.uploadAndInsert(scope, file);
+  }
+  imageFromClipboard(clipboard) {
+    for (const item of Array.from(clipboard.items ?? [])) {
+      if (item.kind === "file" && item.type.startsWith("image/")) {
+        const file = item.getAsFile();
+        if (file) {
+          return file;
+        }
+      }
+    }
+    for (const file of Array.from(clipboard.files ?? [])) {
+      if (file.type.startsWith("image/")) {
+        return file;
+      }
+    }
+    return null;
+  }
+  async handlePaste(scope, e7) {
+    const clipboard = e7.clipboardData;
+    if (!clipboard) {
+      return;
+    }
+    const file = this.imageFromClipboard(clipboard);
+    if (!file) {
+      return;
+    }
+    e7.preventDefault();
+    await this.uploadAndInsert(scope, file);
+  }
+  async uploadAndInsert(scope, file) {
     if (!this.mediaProvider) {
       this.error = "Image upload is not configured";
       return;
@@ -5730,6 +5761,7 @@ var KoeComments = class extends i4 {
             class="block w-full resize-y border-0 bg-transparent px-4 py-3 text-sm leading-relaxed text-slate-900 placeholder:text-slate-400 focus:outline-none dark:text-slate-100 dark:placeholder:text-slate-500"
             .value=${options.draft}
             @input=${options.onInput}
+            @paste=${(e7) => this.handlePaste(scope, e7)}
             @focus=${() => this.handleComposerFocus(scope)}
             @blur=${this.handleComposerBlur}
           ></textarea>
