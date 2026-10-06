@@ -329,6 +329,7 @@
           <span class="pill">Nested Replies</span>
           <span class="pill">Voting</span>
           <span class="pill">Emoji Reactions</span>
+          <span class="pill">Image Upload</span>
           <span class="pill">Pre-Moderation</span>
           <span class="pill">Admin Roles</span>
           <span class="pill">Dark Mode</span>
@@ -349,6 +350,10 @@
             <p>
               Try writing a markdown comment, replying to an existing thread,
               voting, or adding emoji reactions below.
+            </p>
+            <p>
+              Add <code>?imgbbKey=YOUR_KEY</code> to this URL to unlock image
+              uploads (powered by imgbb) in the composer.
             </p>
           </div>
         </article>
@@ -393,6 +398,16 @@
             } catch (err) {}
           }
         });
+
+        try {
+          var imgbbKey = new URLSearchParams(window.location.search).get(
+            "imgbbKey"
+          );
+          var widget = document.querySelector("koe-comments");
+          if (imgbbKey && widget) {
+            widget.setAttribute("media-api-key", imgbbKey);
+          }
+        } catch (err) {}
       })();
     </script>
   </body>

@@ -27,6 +27,8 @@ describe("Demo Server & Harness", () => {
     expect(htmlRes.status).toBe(200);
     const htmlText = await htmlRes.text();
     expect(htmlText).toContain("<koe-comments");
+    expect(htmlText).toContain("media-api-key");
+    expect(htmlText).toContain("imgbbKey");
 
     const widgetRes = await fetch(`${baseUrl}/widget.js`);
     expect(widgetRes.status).toBe(200);
