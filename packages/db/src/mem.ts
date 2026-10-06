@@ -13,6 +13,9 @@ export async function createMemDb() {
     CREATE TYPE thread_status AS ENUM ('open', 'closed', 'locked');
     CREATE TYPE comment_status AS ENUM ('pending', 'published', 'spam', 'deleted');
     CREATE TYPE reaction_target_type AS ENUM ('comment', 'thread');
+    CREATE TYPE report_status AS ENUM ('open', 'resolved', 'dismissed');
+    CREATE TYPE moderation_action_verb AS ENUM ('approve', 'reject', 'delete');
+    CREATE TYPE moderation_target_type AS ENUM ('comment', 'user', 'thread');
 
     CREATE TABLE users (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -102,6 +105,33 @@ export async function createMemDb() {
 
     CREATE INDEX idx_reactions_target_id ON reactions (target_type, target_id);
     CREATE INDEX idx_reactions_user_id ON reactions (user_id);
+
+    CREATE TABLE reports (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      comment_id UUID NOT NULL REFERENCES comments(id) ON DELETE CASCADE,
+      reporter_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      reason TEXT NOT NULL,
+      status report_status NOT NULL DEFAULT 'open',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX idx_reports_comment_id ON reports (comment_id);
+    CREATE INDEX idx_reports_status ON reports (status);
+    CREATE INDEX idx_reports_reporter_id ON reports (reporter_id);
+
+    CREATE TABLE moderation_actions (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      actor_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      action moderation_action_verb NOT NULL,
+      target_type moderation_target_type NOT NULL,
+      target_id UUID NOT NULL,
+      metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX idx_moderation_actions_target ON moderation_actions (target_type, target_id);
+    CREATE INDEX idx_moderation_actions_actor_id ON moderation_actions (actor_id);
   `);
 
   const db = drizzle(client, { schema });

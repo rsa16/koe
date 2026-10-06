@@ -29,6 +29,13 @@
       "when": 1791252441994,
       "tag": "0003_lowly_legion",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791253168161,
+      "tag": "0004_useful_vivisector",
+      "breakpoints": true
     }
   ]
 }

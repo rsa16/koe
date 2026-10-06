@@ -2,7 +2,11 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { buildApp } from "../src/app.js";
 import { createMemDb, Database, users } from "@koe/db";
 import { eq } from "drizzle-orm";
-import { ModerationQueueResponseSchema, UserRole } from "@koe/core";
+import {
+  ModerationActionListResponseSchema,
+  ModerationQueueResponseSchema,
+  UserRole,
+} from "@koe/core";
 import { FastifyInstance } from "fastify";
 import { signAccessToken } from "@koe/auth";
 
@@ -52,6 +56,24 @@ describe("Moderation API Seam Integration Tests", () => {
 
     await memDb.update(users).set({ role }).where(eq(users.id, userId));
     return signAccessToken({ userId, role }, { secret: jwtSecret, expiresIn: "15m" });
+  }
+
+  async function userIdFor(token: string): Promise<string> {
+    const meRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/auth/me",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(meRes.statusCode).toBe(200);
+    return meRes.json().id;
+  }
+
+  async function auditLog(token: string) {
+    return app.inject({
+      method: "GET",
+      url: "/api/v1/moderation/actions",
+      headers: { authorization: `Bearer ${token}` },
+    });
   }
 
   async function postComment(
@@ -387,6 +409,83 @@ describe("Moderation API Seam Integration Tests", () => {
 
       expect(response.statusCode).toBe(200);
       expect(response.json().comments).toHaveLength(0);
+    });
+  });
+
+  describe("moderation audit log", () => {
+    it("writes an audit record for every moderation action", async () => {
+      const threadId = await createThread("audit-post");
+      const authorToken = await anonToken();
+      const moderatorToken = await userToken("moderator");
+      const actorId = await userIdFor(moderatorToken);
+
+      const approvedId = await postComment(threadId, authorToken, "approve me");
+      const rejectedId = await postComment(threadId, authorToken, "reject me");
+      const deletedId = await postComment(threadId, authorToken, "delete me");
+
+      await act(approvedId, "approve", moderatorToken);
+      await act(rejectedId, "reject", moderatorToken);
+      await act(deletedId, "delete", moderatorToken);
+
+      const adminToken = await userToken("admin");
+      const response = await auditLog(adminToken);
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      const parsed = ModerationActionListResponseSchema.safeParse(body);
+      expect(parsed.success).toBe(true);
+
+      const byTarget = new Map(
+        body.actions.map((entry: { targetId: string }) => [
+          entry.targetId,
+          entry,
+        ])
+      );
+      for (const [targetId, action] of [
+        [approvedId, "approve"],
+        [rejectedId, "reject"],
+        [deletedId, "delete"],
+      ] as const) {
+        const entry = byTarget.get(targetId);
+        expect(entry).toBeDefined();
+        expect(entry.action).toBe(action);
+        expect(entry.targetType).toBe("comment");
+        expect(entry.actorId).toBe(actorId);
+        expect(entry.metadata.previousStatus).toBe("pending");
+      }
+    });
+
+    it("does not write an audit record for a failed action", async () => {
+      const threadId = await createThread("audit-failed-post");
+      const authorToken = await anonToken();
+      const moderatorToken = await userToken("moderator");
+      const commentId = await postComment(threadId, authorToken, "once");
+
+      await act(commentId, "approve", moderatorToken);
+      const conflict = await act(commentId, "approve", moderatorToken);
+      expect(conflict.statusCode).toBe(409);
+
+      const adminToken = await userToken("admin");
+      const response = await auditLog(adminToken);
+      const entries = response
+        .json()
+        .actions.filter(
+          (entry: { targetId: string }) => entry.targetId === commentId
+        );
+
+      expect(entries).toHaveLength(1);
+    });
+
+    it("requires authentication and admin role", async () => {
+      const unauthorized = await auditLog("not-a-token");
+      expect(unauthorized.statusCode).toBe(401);
+
+      const moderatorToken = await userToken("moderator");
+      const forbidden = await auditLog(moderatorToken);
+      expect(forbidden.statusCode).toBe(403);
+      expect(forbidden.headers["content-type"]).toContain(
+        "application/problem+json"
+      );
     });
   });
 });

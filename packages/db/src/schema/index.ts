@@ -7,6 +7,9 @@ export const identityProviderEnum = pgEnum("identity_provider", ["anonymous", "g
 export const threadStatusEnum = pgEnum("thread_status", ["open", "closed", "locked"]);
 export const commentStatusEnum = pgEnum("comment_status", ["pending", "published", "spam", "deleted"]);
 export const reactionTargetTypeEnum = pgEnum("reaction_target_type", ["comment", "thread"]);
+export const reportStatusEnum = pgEnum("report_status", ["open", "resolved", "dismissed"]);
+export const moderationActionVerbEnum = pgEnum("moderation_action_verb", ["approve", "reject", "delete"]);
+export const moderationTargetTypeEnum = pgEnum("moderation_target_type", ["comment", "user", "thread"]);
 
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -120,5 +123,40 @@ export const reactions = pgTable(
     ),
     index("idx_reactions_target_id").on(table.targetType, table.targetId),
     index("idx_reactions_user_id").on(table.userId),
+  ]
+);
+
+export const reports = pgTable(
+  "reports",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    commentId: uuid("comment_id").notNull().references(() => comments.id, { onDelete: "cascade" }),
+    reporterId: uuid("reporter_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    reason: text("reason").notNull(),
+    status: reportStatusEnum("status").notNull().default("open"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("idx_reports_comment_id").on(table.commentId),
+    index("idx_reports_status").on(table.status),
+    index("idx_reports_reporter_id").on(table.reporterId),
+  ]
+);
+
+export const moderationActions = pgTable(
+  "moderation_actions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    actorId: uuid("actor_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    action: moderationActionVerbEnum("action").notNull(),
+    targetType: moderationTargetTypeEnum("target_type").notNull(),
+    targetId: uuid("target_id").notNull(),
+    metadata: jsonb("metadata").notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("idx_moderation_actions_target").on(table.targetType, table.targetId),
+    index("idx_moderation_actions_actor_id").on(table.actorId),
   ]
 );

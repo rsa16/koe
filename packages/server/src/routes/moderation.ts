@@ -1,12 +1,19 @@
 import {
   CommentSchema,
   CreateModerationActionBodySchema,
-  ModerationQueueItemSchema,
+  ModerationActionListResponseSchema,
   ModerationQueueResponseSchema,
   ThreadContext,
 } from "@koe/core";
-import { comments, Database, threads, users } from "@koe/db";
-import { eq } from "drizzle-orm";
+import {
+  comments,
+  Database,
+  moderationActions,
+  reports,
+  threads,
+  users,
+} from "@koe/db";
+import { and, desc, eq, inArray, or } from "drizzle-orm";
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
 export interface ModerationRoutesOptions {
@@ -25,6 +32,11 @@ export default async function moderationRoutes(
     request: FastifyRequest,
     reply: FastifyReply
   ) => {
+    const openReports = db
+      .select({ commentId: reports.commentId })
+      .from(reports)
+      .where(eq(reports.status, "open"));
+
     const rows: Array<{
       comment: typeof comments.$inferSelect;
       thread: ThreadContext;
@@ -43,7 +55,15 @@ export default async function moderationRoutes(
       .from(comments)
       .innerJoin(threads, eq(comments.threadId, threads.id))
       .innerJoin(users, eq(comments.authorId, users.id))
-      .where(eq(comments.status, "pending"))
+      .where(
+        or(
+          eq(comments.status, "pending"),
+          and(
+            eq(comments.status, "published"),
+            inArray(comments.id, openReports)
+          )
+        )
+      )
       .orderBy(comments.createdAt, comments.id);
 
     return reply.status(200).send(
@@ -93,30 +113,93 @@ export default async function moderationRoutes(
       );
     }
 
-    if (action !== "delete" && found[0].status !== "pending") {
+    const openReports = await db
+      .select({ id: reports.id })
+      .from(reports)
+      .where(
+        and(eq(reports.commentId, commentId), eq(reports.status, "open"))
+      )
+      .limit(1);
+    const hasOpenReports = openReports.length > 0;
+
+    if (action !== "delete" && found[0].status !== "pending" && !hasOpenReports) {
       return app.sendProblem(
         reply,
         409,
         "Conflict",
-        "Only pending comments can be approved or rejected",
+        "Only pending or reported comments can be approved or rejected",
         request.url
       );
     }
 
     const status = action === "approve" ? "published" : "deleted";
-    const [updated] = await db
-      .update(comments)
-      .set({ status })
-      .where(eq(comments.id, commentId))
-      .returning();
+    const reportStatus = action === "approve" ? "dismissed" : "resolved";
+
+    const updated = await db.transaction(async (tx: Database) => {
+      const [comment] = await tx
+        .update(comments)
+        .set({ status })
+        .where(eq(comments.id, commentId))
+        .returning();
+
+      await tx
+        .update(reports)
+        .set({ status: reportStatus, updatedAt: new Date() })
+        .where(
+          and(eq(reports.commentId, commentId), eq(reports.status, "open"))
+        );
+
+      await tx.insert(moderationActions).values({
+        actorId: request.user!.id,
+        action,
+        targetType: "comment",
+        targetId: commentId,
+        metadata: { previousStatus: found[0].status },
+      });
+
+      return comment;
+    });
 
     return reply.status(200).send(CommentSchema.parse(updated));
+  };
+
+  // Moderation: audit log
+  // GET /api/v1/moderation/actions
+  const auditHandler = async (
+    request: FastifyRequest,
+    reply: FastifyReply
+  ) => {
+    const rows: Array<{
+      record: typeof moderationActions.$inferSelect;
+      actorName: string | null;
+    }> = await db
+      .select({
+        record: moderationActions,
+        actorName: users.name,
+      })
+      .from(moderationActions)
+      .innerJoin(users, eq(moderationActions.actorId, users.id))
+      .orderBy(desc(moderationActions.createdAt), desc(moderationActions.id));
+
+    return reply.status(200).send(
+      ModerationActionListResponseSchema.parse({
+        actions: rows.map((row) => ({
+          ...row.record,
+          actorName: row.actorName,
+        })),
+      })
+    );
   };
 
   app.get(
     "/api/v1/moderation/queue",
     { preHandler: app.requireRole(["moderator", "admin"]) },
     queueHandler
+  );
+  app.get(
+    "/api/v1/moderation/actions",
+    { preHandler: app.requireRole(["admin"]) },
+    auditHandler
   );
   app.post(
     "/api/v1/moderation/actions",

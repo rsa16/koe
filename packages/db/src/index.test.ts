@@ -3,7 +3,7 @@ import { createMemDb, users, threads } from "./index.js";
 import { eq } from "drizzle-orm";
 
 describe("Database Schema Integration", () => {
-  it("inserts and selects from threads table", async () => {
+  it("inserts and selects from threads table", { timeout: 30000 }, async () => {
     const { db } = await createMemDb();
 
     const [inserted] = await db

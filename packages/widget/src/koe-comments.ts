@@ -117,6 +117,7 @@ const ICON_PATHS = {
   close: "M6 18 18 6M6 6l12 12",
   alert:
     "M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z",
+  flag: "M3 3v1.5M3 21v-6m0 0 2.77-.693a9 9 0 0 1 6.208.682l.108.054a9 9 0 0 0 6.086.71l3.114-.732a48.524 48.524 0 0 1-.005-10.499l-3.11.732a9 9 0 0 1-6.085-.711l-.108-.054a9 9 0 0 0-6.208-.682L3 4.5M3 15V4.5",
 };
 
 @customElement("koe-comments")
@@ -161,6 +162,10 @@ export class KoeComments extends LitElement {
   @state() private gifError = "";
   @state() private gifUrl = "";
   @state() private uploadingScope: string | null = null;
+  @state() private openReportPicker: string | null = null;
+  @state() private reportReason = "";
+  @state() private reporting = false;
+  @state() private reportedComments: Set<string> = new Set();
 
   private client: KoeClient | null = null;
   private token = "";
@@ -711,6 +716,40 @@ export class KoeComments extends LitElement {
     }
   }
 
+  private toggleReportPicker(commentId: string) {
+    this.openReportPicker =
+      this.openReportPicker === commentId ? null : commentId;
+    this.reportReason = "";
+  }
+
+  private closeReportPicker() {
+    this.openReportPicker = null;
+    this.reportReason = "";
+  }
+
+  private async submitReport(commentId: string) {
+    const reason = this.reportReason.trim();
+    if (!reason || !this.threadId || this.reporting) {
+      return;
+    }
+    this.reporting = true;
+    this.error = "";
+    try {
+      await this.withAuthRetry(() =>
+        this.client!.comments.report(commentId, reason, this.token)
+      );
+      const reported = new Set(this.reportedComments);
+      reported.add(commentId);
+      this.reportedComments = reported;
+      this.closeReportPicker();
+    } catch (err) {
+      this.error =
+        err instanceof Error ? err.message : "Failed to report comment";
+    } finally {
+      this.reporting = false;
+    }
+  }
+
   private icon(path: string, extraClass = ""): TemplateResult {
     return html`<svg
       xmlns="http://www.w3.org/2000/svg"
@@ -1147,6 +1186,47 @@ export class KoeComments extends LitElement {
     `;
   }
 
+  private renderReportPicker(commentId: string): TemplateResult {
+    return html`
+      <div
+        class="report-picker pop-in mt-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-900"
+      >
+        <label
+          class="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500"
+          for="report-reason-${commentId}"
+        >
+          Report this comment
+        </label>
+        <textarea
+          id="report-reason-${commentId}"
+          rows="2"
+          class="report-reason-input block w-full resize-y rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-400 focus:outline-none dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-100 dark:placeholder:text-slate-500"
+          placeholder="Why are you reporting this comment?"
+          .value=${this.reportReason}
+          @input=${(e: Event) =>
+            (this.reportReason = (e.target as HTMLTextAreaElement).value)}
+        ></textarea>
+        <div class="mt-2 flex justify-end gap-2">
+          <button
+            type="button"
+            class="rounded-full px-3 py-1.5 text-sm font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+            @click=${this.closeReportPicker}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            class="report-submit rounded-full bg-red-600 px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-red-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40 disabled:cursor-not-allowed disabled:opacity-40"
+            ?disabled=${this.reporting || !this.reportReason.trim()}
+            @click=${() => this.submitReport(commentId)}
+          >
+            ${this.reporting ? "Reporting..." : "Report"}
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
   private renderComment(comment: CommentNode, depth = 0): TemplateResult {
     const createdAt = new Date(comment.createdAt);
     const reactions = this.visibleReactions(comment);
@@ -1155,6 +1235,7 @@ export class KoeComments extends LitElement {
     const hiddenCount = reactions.length - MAX_VISIBLE_REACTIONS;
     const canToggle = reactions.length > MAX_VISIBLE_REACTIONS;
     const collapsed = this.collapsedThreads.has(comment.id);
+    const reported = this.reportedComments.has(comment.id);
     const childCount = comment.children.length;
     return html`
       <li class="comment">
@@ -1290,13 +1371,28 @@ export class KoeComments extends LitElement {
 
               <button
                 type="button"
-                class="reply-button ml-auto inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                class="report-button ml-auto inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-60 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                aria-label="Report comment"
+                title=${reported ? "Reported" : "Report"}
+                ?disabled=${reported}
+                @click=${() => this.toggleReportPicker(comment.id)}
+              >
+                ${this.icon(ICON_PATHS.flag)}
+                ${reported ? "Reported" : "Report"}
+              </button>
+              <button
+                type="button"
+                class="reply-button inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
                 @click=${() => this.startReply(comment.id)}
               >
                 ${this.icon(ICON_PATHS.reply)}
                 Reply
               </button>
             </div>
+
+            ${this.openReportPicker === comment.id
+              ? this.renderReportPicker(comment.id)
+              : nothing}
 
             ${comment.id === this.replyTo
               ? html`

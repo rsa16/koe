@@ -221,9 +221,32 @@ export const CommentListResponseSchema = z.object({
 });
 export type CommentListResponse = z.infer<typeof CommentListResponseSchema>;
 
+// Report schemas
+export const ReportSchema = z.object({
+  id: z.string().uuid(),
+  commentId: z.string().uuid(),
+  reporterId: z.string().uuid(),
+  reason: z.string(),
+  status: ReportStatusSchema,
+  createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
+});
+export type Report = z.infer<typeof ReportSchema>;
+
+export const CreateReportParamsSchema = IdParamSchema;
+export type CreateReportParams = IdParam;
+
+export const CreateReportBodySchema = z.object({
+  reason: z.string().trim().min(1).max(1000),
+});
+export type CreateReportBody = z.infer<typeof CreateReportBodySchema>;
+
 // Moderation schemas
 export const ModerationActionVerbSchema = z.enum(["approve", "reject", "delete"]);
 export type ModerationActionVerb = z.infer<typeof ModerationActionVerbSchema>;
+
+export const ModerationTargetTypeSchema = z.enum(["comment", "user", "thread"]);
+export type ModerationTargetType = z.infer<typeof ModerationTargetTypeSchema>;
 
 export const CreateModerationActionBodySchema = z.object({
   commentId: z.string().uuid(),
@@ -252,6 +275,29 @@ export const ModerationQueueResponseSchema = z.object({
 });
 export type ModerationQueueResponse = z.infer<
   typeof ModerationQueueResponseSchema
+>;
+
+export const ModerationActionSchema = z.object({
+  id: z.string().uuid(),
+  actorId: z.string().uuid(),
+  action: ModerationActionVerbSchema,
+  targetType: ModerationTargetTypeSchema,
+  targetId: z.string().uuid(),
+  metadata: z.record(z.unknown()).default({}),
+  createdAt: z.coerce.date(),
+});
+export type ModerationAction = z.infer<typeof ModerationActionSchema>;
+
+export const ModerationActionItemSchema = ModerationActionSchema.extend({
+  actorName: z.string().nullable(),
+});
+export type ModerationActionItem = z.infer<typeof ModerationActionItemSchema>;
+
+export const ModerationActionListResponseSchema = z.object({
+  actions: z.array(ModerationActionItemSchema),
+});
+export type ModerationActionListResponse = z.infer<
+  typeof ModerationActionListResponseSchema
 >;
 
 // Auth schemas

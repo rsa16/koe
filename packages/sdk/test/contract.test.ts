@@ -86,6 +86,27 @@ const reaction = {
   updatedAt: ISO_DATE,
 };
 
+const report = {
+  id: "723e4567-e89b-12d3-a456-426614174000",
+  commentId: comment.id,
+  reporterId: guestUser.id,
+  reason: "abusive language",
+  status: "open",
+  createdAt: ISO_DATE,
+  updatedAt: ISO_DATE,
+};
+
+const moderationAction = {
+  id: "823e4567-e89b-12d3-a456-426614174000",
+  actorId: guestUser.id,
+  action: "approve",
+  targetType: "comment",
+  targetId: comment.id,
+  metadata: {},
+  createdAt: ISO_DATE,
+  actorName: "Alice",
+};
+
 const moderationQueueItem = {
   id: comment.id,
   threadId: comment.threadId,
@@ -480,6 +501,53 @@ describe("Koe SDK Contract Tests", () => {
     });
     expect(result.status).toBe("published");
     expect(result.id).toBe(comment.id);
+  });
+
+  it("comments.report posts the reason and parses the created report", async () => {
+    const { fetchFn, calls } = mockFetch(() => ({ status: 201, body: report }));
+    const client = createKoeClient({ baseUrl: "http://localhost:3000", fetch: fetchFn });
+
+    const result = await client.comments.report(
+      comment.id,
+      "abusive language",
+      "some-token"
+    );
+
+    expect(calls[0].url).toBe(
+      `http://localhost:3000/api/v1/comments/${comment.id}/reports`
+    );
+    expect(calls[0].init.method).toBe("POST");
+    expect(calls[0].init.headers).toMatchObject({
+      authorization: "Bearer some-token",
+      "content-type": "application/json",
+    });
+    expect(JSON.parse(String(calls[0].init.body))).toEqual({
+      reason: "abusive language",
+    });
+    expect(result.commentId).toBe(comment.id);
+    expect(result.status).toBe("open");
+    expect(result.createdAt).toBeInstanceOf(Date);
+  });
+
+  it("moderation.actions fetches the audit log", async () => {
+    const { fetchFn, calls } = mockFetch(() => ({
+      status: 200,
+      body: { actions: [moderationAction] },
+    }));
+    const client = createKoeClient({ baseUrl: "http://localhost:3000", fetch: fetchFn });
+
+    const result = await client.moderation.actions("some-token");
+
+    expect(calls[0].url).toBe("http://localhost:3000/api/v1/moderation/actions");
+    expect(calls[0].init.method).toBe("GET");
+    expect(calls[0].init.headers).toMatchObject({
+      authorization: "Bearer some-token",
+    });
+    expect(result.actions).toHaveLength(1);
+    expect(result.actions[0].action).toBe("approve");
+    expect(result.actions[0].targetType).toBe("comment");
+    expect(result.actions[0].actorName).toBe("Alice");
+    expect(result.actions[0].createdAt).toBeInstanceOf(Date);
   });
 
   it("throws KoeApiError with problem details on a non-ok response", async () => {

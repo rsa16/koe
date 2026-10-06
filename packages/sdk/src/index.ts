@@ -9,12 +9,16 @@ import {
   CreateCommentBody,
   DEFAULT_EMOJI_ALLOWLIST,
   GetThreadByRefQuery,
+  ModerationActionListResponse,
+  ModerationActionListResponseSchema,
   ModerationActionVerb,
   ModerationQueueItem,
   ModerationQueueResponse,
   ModerationQueueResponseSchema,
   Reaction,
   ReactionSchema,
+  Report,
+  ReportSchema,
   Thread,
   ThreadResponse,
   ThreadResponseSchema,
@@ -34,11 +38,14 @@ export type {
   CommentNode,
   CreateCommentBody,
   GetThreadByRefQuery,
+  ModerationAction,
+  ModerationActionListResponse,
   ModerationActionVerb,
   ModerationQueueItem,
   ModerationQueueResponse,
   Reaction,
   ReactionTotals,
+  Report,
   Thread,
   ThreadResponse,
   User,
@@ -132,9 +139,11 @@ export interface KoeClient {
       token?: string
     ): Promise<Reaction | null>;
     unreact(commentId: string, emoji: string, token?: string): Promise<void>;
+    report(commentId: string, reason: string, token?: string): Promise<Report>;
   };
   moderation: {
     queue(token?: string): Promise<ModerationQueueResponse>;
+    actions(token?: string): Promise<ModerationActionListResponse>;
     act(
       commentId: string,
       action: ModerationActionVerb,
@@ -302,6 +311,12 @@ export function createKoeClient(options: KoeClientOptions): KoeClient {
           { method: "DELETE", token }
         );
       },
+      report: (commentId, reason, token) =>
+        request(ReportSchema, `/api/v1/comments/${commentId}/reports`, {
+          method: "POST",
+          body: { reason },
+          token,
+        }),
     },
     moderation: {
       queue: (token) =>
@@ -309,6 +324,12 @@ export function createKoeClient(options: KoeClientOptions): KoeClient {
           method: "GET",
           token,
         }),
+      actions: (token) =>
+        request(
+          ModerationActionListResponseSchema,
+          "/api/v1/moderation/actions",
+          { method: "GET", token }
+        ),
       act: (commentId, action, token) =>
         request(CommentSchema, "/api/v1/moderation/actions", {
           method: "POST",

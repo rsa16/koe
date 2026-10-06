@@ -548,4 +548,50 @@ describe("<koe-comments> widget", () => {
       element.shadowRoot!.querySelector(".reaction-button")?.textContent
     ).toContain("1");
   });
+
+  it("reports a comment through the API and marks it as reported", async () => {
+    const element = mount("widget-report");
+    await waitFor(() => element.shadowRoot?.querySelector(".empty") !== null);
+
+    await postComment(element, "Reportable comment");
+    await waitFor(() => {
+      const items = element.shadowRoot!.querySelectorAll(".comment");
+      return (
+        items.length === 1 &&
+        items[0].textContent?.includes("Reportable comment")
+      );
+    });
+
+    const reportButton = element.shadowRoot!.querySelector(
+      ".report-button"
+    ) as HTMLButtonElement;
+    expect(reportButton).not.toBeNull();
+    expect(reportButton.textContent?.trim()).toBe("Report");
+    reportButton.click();
+    await waitFor(
+      () => element.shadowRoot?.querySelector(".report-picker") !== null
+    );
+
+    const reasonInput = element.shadowRoot!.querySelector(
+      ".report-reason-input"
+    ) as HTMLTextAreaElement;
+    reasonInput.value = "This is abusive";
+    reasonInput.dispatchEvent(new Event("input", { bubbles: true }));
+    await element.updateComplete;
+
+    const submit = element.shadowRoot!.querySelector(
+      ".report-submit"
+    ) as HTMLButtonElement;
+    expect(submit.disabled).toBe(false);
+    submit.click();
+
+    await waitFor(
+      () => element.shadowRoot!.querySelector(".report-picker") === null
+    );
+    const reportedButton = element.shadowRoot!.querySelector(
+      ".report-button"
+    ) as HTMLButtonElement;
+    expect(reportedButton.textContent?.trim()).toBe("Reported");
+    expect(reportedButton.disabled).toBe(true);
+  });
 });
