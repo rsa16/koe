@@ -242,16 +242,48 @@ export const CreateReportBodySchema = z.object({
 export type CreateReportBody = z.infer<typeof CreateReportBodySchema>;
 
 // Moderation schemas
-export const ModerationActionVerbSchema = z.enum(["approve", "reject", "delete"]);
-export type ModerationActionVerb = z.infer<typeof ModerationActionVerbSchema>;
-
 export const ModerationTargetTypeSchema = z.enum(["comment", "user", "thread"]);
 export type ModerationTargetType = z.infer<typeof ModerationTargetTypeSchema>;
 
-export const CreateModerationActionBodySchema = z.object({
+const COMMENT_MODERATION_ACTIONS = ["approve", "reject", "delete"] as const;
+const USER_MODERATION_ACTIONS = ["ban", "suspend"] as const;
+
+export const CommentModerationActionVerbSchema = z.enum(
+  COMMENT_MODERATION_ACTIONS
+);
+export type CommentModerationActionVerb = z.infer<
+  typeof CommentModerationActionVerbSchema
+>;
+
+export const UserModerationActionVerbSchema = z.enum(USER_MODERATION_ACTIONS);
+export type UserModerationActionVerb = z.infer<
+  typeof UserModerationActionVerbSchema
+>;
+
+export const ModerationActionVerbSchema = z.enum([
+  ...COMMENT_MODERATION_ACTIONS,
+  ...USER_MODERATION_ACTIONS,
+]);
+export type ModerationActionVerb = z.infer<typeof ModerationActionVerbSchema>;
+
+export const CommentModerationActionSchema = z.object({
   commentId: z.string().uuid(),
-  action: ModerationActionVerbSchema,
+  action: CommentModerationActionVerbSchema,
 });
+export type CommentModerationAction = z.infer<
+  typeof CommentModerationActionSchema
+>;
+
+export const UserModerationActionSchema = z.object({
+  userId: z.string().uuid(),
+  action: UserModerationActionVerbSchema,
+});
+export type UserModerationAction = z.infer<typeof UserModerationActionSchema>;
+
+export const CreateModerationActionBodySchema = z.union([
+  CommentModerationActionSchema,
+  UserModerationActionSchema,
+]);
 export type CreateModerationActionBody = z.infer<
   typeof CreateModerationActionBodySchema
 >;

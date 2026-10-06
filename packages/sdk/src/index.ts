@@ -5,6 +5,7 @@ import {
   CommentListQuery,
   CommentListResponse,
   CommentListResponseSchema,
+  CommentModerationActionVerb,
   CommentSchema,
   CreateCommentBody,
   DEFAULT_EMOJI_ALLOWLIST,
@@ -23,6 +24,7 @@ import {
   ThreadResponse,
   ThreadResponseSchema,
   User,
+  UserModerationActionVerb,
   UserSchema,
   Vote,
   VoteSchema,
@@ -35,12 +37,14 @@ export type {
   Comment,
   CommentListQuery,
   CommentListResponse,
+  CommentModerationActionVerb,
   CommentNode,
   CreateCommentBody,
   GetThreadByRefQuery,
   ModerationAction,
   ModerationActionListResponse,
   ModerationActionVerb,
+  UserModerationActionVerb,
   ModerationQueueItem,
   ModerationQueueResponse,
   Reaction,
@@ -146,9 +150,11 @@ export interface KoeClient {
     actions(token?: string): Promise<ModerationActionListResponse>;
     act(
       commentId: string,
-      action: ModerationActionVerb,
+      action: CommentModerationActionVerb,
       token?: string
     ): Promise<Comment>;
+    ban(userId: string, token?: string): Promise<User>;
+    suspend(userId: string, token?: string): Promise<User>;
   };
 }
 
@@ -235,6 +241,18 @@ export function createKoeClient(options: KoeClientOptions): KoeClient {
 
     const data: unknown = await response.json();
     return schema.parse(data);
+  }
+
+  function moderateUser(
+    userId: string,
+    action: UserModerationActionVerb,
+    token?: string
+  ): Promise<User> {
+    return request(UserSchema, "/api/v1/moderation/actions", {
+      method: "POST",
+      body: { userId, action },
+      token,
+    });
   }
 
   return {
@@ -336,6 +354,8 @@ export function createKoeClient(options: KoeClientOptions): KoeClient {
           body: { commentId, action },
           token,
         }),
+      ban: (userId, token) => moderateUser(userId, "ban", token),
+      suspend: (userId, token) => moderateUser(userId, "suspend", token),
     },
   };
 }

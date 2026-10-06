@@ -5,9 +5,9 @@ import {
   CreateCommentBodySchema,
   CreateCommentParamsSchema,
 } from "@koe/core";
-import { comments, Database, reactions, threads, votes } from "@koe/db";
+import { comments, Database, reactions, threads, users, votes } from "@koe/db";
 import { renderMarkdown } from "@koe/renderer";
-import { and, eq, gt, inArray, or, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, notInArray, or, sql } from "drizzle-orm";
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { computeReplyPosition } from "../replies.js";
 
@@ -174,7 +174,7 @@ export default async function commentsRoutes(
       );
     }
 
-    const visibleFilter = request.user
+    const statusFilter = request.user
       ? or(
           eq(comments.status, "published"),
           and(
@@ -183,6 +183,16 @@ export default async function commentsRoutes(
           )
         )
       : eq(comments.status, "published");
+
+    const bannedAuthorIds = db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.status, "banned"));
+
+    const visibleFilter = and(
+      statusFilter,
+      notInArray(comments.authorId, bannedAuthorIds)
+    );
 
     const whereRoots = and(
       eq(comments.threadId, threadId),
@@ -263,7 +273,7 @@ export default async function commentsRoutes(
 
   app.post(
     "/api/v1/threads/:id/comments",
-    { preHandler: app.authenticate },
+    { preHandler: [app.authenticate, app.requireActiveUser] },
     createCommentHandler
   );
   app.get(

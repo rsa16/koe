@@ -219,12 +219,12 @@ export default async function reactionsRoutes(
 
     app.post(
       `${basePath}/:id/reactions`,
-      { preHandler: app.authenticate },
+      { preHandler: [app.authenticate, app.requireActiveUser] },
       reactHandler
     );
     app.delete(
       `${basePath}/:id/reactions/:emoji`,
-      { preHandler: app.authenticate },
+      { preHandler: [app.authenticate, app.requireActiveUser] },
       unreactHandler
     );
   }

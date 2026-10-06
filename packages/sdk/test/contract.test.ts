@@ -503,6 +503,42 @@ describe("Koe SDK Contract Tests", () => {
     expect(result.id).toBe(comment.id);
   });
 
+  it("moderation.suspend posts a suspend action and parses the updated user", async () => {
+    const { fetchFn, calls } = mockFetch(() => ({
+      status: 200,
+      body: { ...guestUser, status: "suspended" },
+    }));
+    const client = createKoeClient({ baseUrl: "http://localhost:3000", fetch: fetchFn });
+
+    const result = await client.moderation.suspend(guestUser.id, "some-token");
+
+    expect(calls[0].url).toBe("http://localhost:3000/api/v1/moderation/actions");
+    expect(calls[0].init.method).toBe("POST");
+    expect(JSON.parse(String(calls[0].init.body))).toEqual({
+      userId: guestUser.id,
+      action: "suspend",
+    });
+    expect(result.status).toBe("suspended");
+  });
+
+  it("moderation.ban posts a ban action and parses the updated user", async () => {
+    const { fetchFn, calls } = mockFetch(() => ({
+      status: 200,
+      body: { ...guestUser, status: "banned" },
+    }));
+    const client = createKoeClient({ baseUrl: "http://localhost:3000", fetch: fetchFn });
+
+    const result = await client.moderation.ban(guestUser.id, "some-token");
+
+    expect(calls[0].url).toBe("http://localhost:3000/api/v1/moderation/actions");
+    expect(calls[0].init.method).toBe("POST");
+    expect(JSON.parse(String(calls[0].init.body))).toEqual({
+      userId: guestUser.id,
+      action: "ban",
+    });
+    expect(result.status).toBe("banned");
+  });
+
   it("comments.report posts the reason and parses the created report", async () => {
     const { fetchFn, calls } = mockFetch(() => ({ status: 201, body: report }));
     const client = createKoeClient({ baseUrl: "http://localhost:3000", fetch: fetchFn });

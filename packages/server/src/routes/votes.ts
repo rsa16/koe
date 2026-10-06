@@ -183,12 +183,12 @@ export default async function votesRoutes(
 
   app.post(
     "/api/v1/comments/:id/vote",
-    { preHandler: app.authenticate },
+    { preHandler: [app.authenticate, app.requireActiveUser] },
     voteHandler
   );
   app.delete(
     "/api/v1/comments/:id/vote",
-    { preHandler: app.authenticate },
+    { preHandler: [app.authenticate, app.requireActiveUser] },
     unvoteHandler
   );
 }

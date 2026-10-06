@@ -36,6 +36,13 @@
       "when": 1791253168161,
       "tag": "0004_useful_vivisector",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791289079938,
+      "tag": "0005_large_vertigo",
+      "breakpoints": true
     }
   ]
 }

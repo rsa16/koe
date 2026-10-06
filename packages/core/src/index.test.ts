@@ -3,6 +3,7 @@ import {
   CommentListQuerySchema,
   CommentListResponseSchema,
   CreateCommentBodySchema,
+  CreateModerationActionBodySchema,
   UserSchema,
   ThreadSchema,
   CommentSchema,
@@ -51,6 +52,38 @@ describe("Core Zod Schemas", () => {
     expect(UpdateUserBodySchema.safeParse({ role: "moderator" }).success).toBe(true);
     expect(UpdateUserBodySchema.safeParse({ role: "invalid_role" }).success).toBe(false);
     expect(UpdateUserBodySchema.safeParse({}).success).toBe(false);
+  });
+
+  it("validates comment moderation action bodies", () => {
+    for (const action of ["approve", "reject", "delete"]) {
+      const parsed = CreateModerationActionBodySchema.safeParse({
+        commentId: "123e4567-e89b-12d3-a456-426614174000",
+        action,
+      });
+      expect(parsed.success).toBe(true);
+    }
+    expect(
+      CreateModerationActionBodySchema.safeParse({
+        commentId: "123e4567-e89b-12d3-a456-426614174000",
+        action: "ban",
+      }).success
+    ).toBe(false);
+  });
+
+  it("validates user moderation action bodies", () => {
+    for (const action of ["ban", "suspend"]) {
+      const parsed = CreateModerationActionBodySchema.safeParse({
+        userId: "123e4567-e89b-12d3-a456-426614174000",
+        action,
+      });
+      expect(parsed.success).toBe(true);
+    }
+    expect(
+      CreateModerationActionBodySchema.safeParse({
+        userId: "123e4567-e89b-12d3-a456-426614174000",
+        action: "delete",
+      }).success
+    ).toBe(false);
   });
 
   it("coerces ISO date strings into Date instances", () => {

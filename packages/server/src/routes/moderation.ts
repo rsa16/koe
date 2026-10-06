@@ -4,6 +4,7 @@ import {
   ModerationActionListResponseSchema,
   ModerationQueueResponseSchema,
   ThreadContext,
+  UserSchema,
 } from "@koe/core";
 import {
   comments,
@@ -95,7 +96,61 @@ export default async function moderationRoutes(
       );
     }
 
-    const { commentId, action } = bodyParsed.data;
+    const body = bodyParsed.data;
+
+    if ("userId" in body) {
+      const { userId, action } = body;
+
+      if (action === "ban" && request.user!.role !== "admin") {
+        return app.sendProblem(
+          reply,
+          403,
+          "Forbidden",
+          "Only admins can ban users",
+          request.url
+        );
+      }
+
+      const found = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+
+      if (found.length === 0) {
+        return app.sendProblem(
+          reply,
+          404,
+          "Not Found",
+          "User does not exist",
+          request.url
+        );
+      }
+
+      const status = action === "ban" ? "banned" : "suspended";
+
+      const updated = await db.transaction(async (tx: Database) => {
+        const [user] = await tx
+          .update(users)
+          .set({ status, updatedAt: new Date() })
+          .where(eq(users.id, userId))
+          .returning();
+
+        await tx.insert(moderationActions).values({
+          actorId: request.user!.id,
+          action,
+          targetType: "user",
+          targetId: userId,
+          metadata: { previousStatus: found[0].status },
+        });
+
+        return user;
+      });
+
+      return reply.status(200).send(UserSchema.parse(updated));
+    }
+
+    const { commentId, action } = body;
 
     const found = await db
       .select()

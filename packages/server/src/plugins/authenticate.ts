@@ -85,6 +85,21 @@ export default fp(async function authenticatePlugin(
   );
 
   app.decorate(
+    "requireActiveUser",
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      if (request.user && request.user.status !== "active") {
+        return app.sendProblem(
+          reply,
+          403,
+          "Forbidden",
+          "Suspended or banned accounts cannot interact with the API",
+          request.url
+        );
+      }
+    }
+  );
+
+  app.decorate(
     "requireRole",
     (allowedRoles: UserRole[]) => {
       return async (request: FastifyRequest, reply: FastifyReply) => {
@@ -121,6 +136,10 @@ declare module "fastify" {
       request: FastifyRequest,
       reply: FastifyReply
     ): Promise<void>;
+    requireActiveUser(
+      request: FastifyRequest,
+      reply: FastifyReply
+    ): Promise<void | FastifyReply>;
     requireRole(
       allowedRoles: UserRole[]
     ): (request: FastifyRequest, reply: FastifyReply) => Promise<void | FastifyReply>;
