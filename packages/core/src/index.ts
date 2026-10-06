@@ -225,12 +225,16 @@ export const CommentSchema = z.object({
 export type Comment = z.infer<typeof CommentSchema>;
 
 export type CommentNode = Comment & {
+  authorName: string | null;
+  authorAvatarUrl: string | null;
   children: CommentNode[];
   userVote: VoteValue | null;
   userReactions: string[];
 };
 export const CommentNodeSchema: z.ZodType<CommentNode, z.ZodTypeDef, unknown> =
   CommentSchema.extend({
+    authorName: z.string().nullable().default(null),
+    authorAvatarUrl: z.string().url().nullable().default(null),
     children: z.lazy(() => z.array(CommentNodeSchema)),
     userVote: VoteValueSchema.nullable().default(null),
     userReactions: z.array(z.string()).default([]),

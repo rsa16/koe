@@ -197,6 +197,27 @@ describe("<koe-comments> widget", () => {
     expect(element.shadowRoot!.querySelector(".empty")).toBeNull();
   });
 
+  it("renders the author's display name for named users", async () => {
+    const client = createKoeClient({ baseUrl });
+    const { accessToken } = await client.auth.anonymous();
+    await client.auth.updateMe({ name: "Alice" }, accessToken);
+    localStorage.clear();
+
+    const element = mount("widget-author-name", `token="${accessToken}"`);
+    await waitFor(() => element.shadowRoot?.querySelector(".empty") !== null);
+
+    await postComment(element, "Hello from Alice");
+    await waitFor(
+      () =>
+        element.shadowRoot!.querySelector('[part~="author"]')?.textContent
+          ?.trim() === "Alice"
+    );
+
+    expect(
+      element.shadowRoot!.querySelector('[part~="author"]')?.textContent?.trim()
+    ).toBe("Alice");
+  });
+
   it("reuses the stored anonymous token on subsequent loads", async () => {
     const first = mount("widget-reuse");
     await waitFor(

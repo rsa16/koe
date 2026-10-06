@@ -759,15 +759,25 @@ export class KoeComments extends LitElement {
     </svg>`;
   }
 
-  private avatar(seed: string, composer = false): TemplateResult {
+  private avatar(
+    seed: string,
+    options: { composer?: boolean; url?: string | null } = {}
+  ): TemplateResult {
+    const { composer = false, url = null } = options;
     const emoji = composer ? "🙂" : avatarEmoji(seed);
     return html`
       <div
         part="avatar"
-        class="koe-avatar flex h-9 w-9 shrink-0 select-none items-center justify-center rounded-full border border-koe-border bg-gradient-to-br from-koe-surface-muted to-koe-skeleton text-lg leading-none shadow-sm"
+        class="koe-avatar flex h-9 w-9 shrink-0 select-none items-center justify-center overflow-hidden rounded-full border border-koe-border bg-gradient-to-br from-koe-surface-muted to-koe-skeleton text-lg leading-none shadow-sm"
         aria-hidden="true"
       >
-        <span>${emoji}</span>
+        ${url
+          ? html`<img
+              src=${url}
+              alt=""
+              class="h-full w-full object-cover"
+            />`
+          : html`<span>${emoji}</span>`}
       </div>
     `;
   }
@@ -905,7 +915,7 @@ export class KoeComments extends LitElement {
     const active = this.isActive(scope);
     return html`
       <div class="flex gap-3">
-        ${this.avatar("composer", true)}
+        ${this.avatar("composer", { composer: true })}
         <div
           part="composer-shell"
           class="composer-shell relative min-w-0 flex-1 rounded-2xl border bg-koe-surface transition-all duration-200 ${active
@@ -1273,14 +1283,16 @@ export class KoeComments extends LitElement {
     return html`
       <li part="comment" class="comment">
         <div class="flex gap-3">
-          ${this.avatar(comment.authorId)}
+          ${this.avatar(comment.authorId, {
+            url: comment.authorAvatarUrl,
+          })}
           <div class="min-w-0 flex-1">
             <div class="mb-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
               <span
                 part="author"
                 class="text-sm font-semibold text-koe-text"
               >
-                Guest
+                ${comment.authorName ?? "Guest"}
               </span>
               <span class="text-koe-border-strong" aria-hidden="true"
                 >·</span

@@ -234,22 +234,40 @@ export default async function commentsRoutes(
       eq(comments.depth, 0),
       visibleFilter
     );
-    const roots = await db
-      .select()
-      .from(comments)
-      .where(whereRoots)
-      .orderBy(comments.createdAt, comments.id)
-      .limit(pageSize)
-      .offset((page - 1) * pageSize);
+    const roots = (
+      await db
+        .select({
+          comment: comments,
+          authorName: users.name,
+          authorAvatarUrl: users.avatarUrl,
+        })
+        .from(comments)
+        .leftJoin(users, eq(users.id, comments.authorId))
+        .where(whereRoots)
+        .orderBy(comments.createdAt, comments.id)
+        .limit(pageSize)
+        .offset((page - 1) * pageSize)
+    ).map(attachAuthor);
     const total = await db.$count(comments, whereRoots);
 
-    const descendants = await db
-      .select()
-      .from(comments)
-      .where(
-        and(eq(comments.threadId, threadId), gt(comments.depth, 0), visibleFilter)
-      )
-      .orderBy(comments.createdAt, comments.id);
+    const descendants = (
+      await db
+        .select({
+          comment: comments,
+          authorName: users.name,
+          authorAvatarUrl: users.avatarUrl,
+        })
+        .from(comments)
+        .leftJoin(users, eq(users.id, comments.authorId))
+        .where(
+          and(
+            eq(comments.threadId, threadId),
+            gt(comments.depth, 0),
+            visibleFilter
+          )
+        )
+        .orderBy(comments.createdAt, comments.id)
+    ).map(attachAuthor);
 
     let userVotes: Map<string, 1 | -1> | undefined;
     let userReactions: Map<string, string[]> | undefined;
@@ -324,10 +342,26 @@ export default async function commentsRoutes(
 }
 
 type CommentRow = typeof comments.$inferSelect;
-interface CommentTreeNode extends CommentRow {
+interface CommentRowWithAuthor extends CommentRow {
+  authorName: string | null;
+  authorAvatarUrl: string | null;
+}
+interface CommentTreeNode extends CommentRowWithAuthor {
   children: CommentTreeNode[];
   userVote: 1 | -1 | null;
   userReactions: string[];
+}
+
+function attachAuthor(row: {
+  comment: CommentRow;
+  authorName: string | null;
+  authorAvatarUrl: string | null;
+}): CommentRowWithAuthor {
+  return {
+    ...row.comment,
+    authorName: row.authorName,
+    authorAvatarUrl: row.authorAvatarUrl,
+  };
 }
 
 interface UserState {
@@ -336,7 +370,7 @@ interface UserState {
 }
 
 function buildCommentTree(
-  rows: CommentRow[],
+  rows: CommentRowWithAuthor[],
   userState?: UserState
 ): CommentTreeNode[] {
   const byParent = new Map<string | null, CommentTreeNode[]>();

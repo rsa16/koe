@@ -209,6 +209,38 @@ describe("Comments API Seam Integration Tests", () => {
     expect(parseResult.success).toBe(true);
   });
 
+  it("GET includes the author's display name in the comment list", async () => {
+    const threadId = await createThread("e2e-author-name");
+    const token = await userToken("member");
+    const meRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/auth/me",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const userId = meRes.json().id;
+    await memDb
+      .update(users)
+      .set({ name: "Alice" })
+      .where(eq(users.id, userId));
+
+    const postResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/threads/${threadId}/comments`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { bodyMd: "Named comment" },
+    });
+    expect(postResponse.statusCode).toBe(201);
+    await approveComment(postResponse.json().id);
+
+    const listResponse = await app.inject({
+      method: "GET",
+      url: `/api/v1/threads/${threadId}/comments`,
+    });
+    expect(listResponse.statusCode).toBe(200);
+    expect(listResponse.json().comments[0].authorName).toBe("Alice");
+    expect(listResponse.json().comments[0].authorAvatarUrl).toBeNull();
+  });
+
   it("GET hides pending comments from anonymous readers but shows them to their author", async () => {
     const threadId = await createThread();
     const authorToken = await anonToken();
