@@ -12,9 +12,9 @@ web component — with a Material admin UI for moderation down the road.
   [ADR 0001](docs/adr/0001-hybrid-cross-origin-auth.md).
 
 > **Status.** Built as tracer-bullet tickets (`.scratch/headless-comments/issues/`).
-> Tickets 01–10 plus 12 (media), 13 (article reactions), 20 (route refactor) and
-> 21 (demo) are implemented. Tickets 11 and 14–19 are still open — see
-> [README Maintenance](#readme-maintenance-unresolved-tickets).
+> Tickets 01–10 plus 12 (media), 13 (article reactions), 14 (reporting & audit),
+> 20 (route refactor) and 21 (demo) are implemented. Tickets 11 and 15–19 are
+> still open — see [README Maintenance](#readme-maintenance-unresolved-tickets).
 
 ## Features (available today)
 
@@ -29,6 +29,10 @@ web component — with a Material admin UI for moderation down the road.
 - Pre-moderation: comments default to `pending`; authors see their own pending
   comments, everyone else doesn't.
 - Moderation queue + approve/reject/delete actions, gated to `moderator`/`admin`.
+- **Reports**: visitors flag a `Comment` with a reason; open reports surface
+  published comments in the moderation queue until they are resolved.
+- Moderation **audit log**: every approve/reject/delete writes an immutable
+  `ModerationAction` record, readable by admins.
 - Admin-only role changes via `PATCH /api/v1/users/:id`.
 - Pluggable **Media** upload: the widget posts a selected image to imgbb with a
   client-side key and embeds the returned URL as `![image](url)`.
@@ -67,7 +71,7 @@ Domain vocabulary is fixed in [`CONTEXT.md`](CONTEXT.md) — use those exact ter
 | Path | Package | Responsibility |
 | --- | --- | --- |
 | `packages/core` | `@koe/core` | Shared Zod schemas, types, event/domain vocabulary. Single contract between server and SDK. |
-| `packages/db` | `@koe/db` | Drizzle schema, migration SQL + runner, PGlite in-memory test DB. |
+| `packages/db` | `@koe/db` | Drizzle schema (`users`, `identities`, `threads`, `comments`, `votes`, `reactions`, `reports`, `moderation_actions`), migration SQL + runner, PGlite in-memory test DB. |
 | `packages/auth` | `@koe/auth` | Bearer token signing/verification, OAuth state, admin session-cookie helpers. |
 | `packages/renderer` | `@koe/renderer` | Markdown → sanitized HTML via `remark` + `rehype-sanitize`. |
 | `packages/server` | `@koe/server` | Fastify REST API. Routes in `src/routes/`, shared plugins in `src/plugins/`. |
@@ -186,12 +190,19 @@ endpoints expect `Authorization: Bearer <accessToken>`.
 | `POST` | `/api/v1/comments/:id/reactions` | bearer | Body `{ emoji }` from the configured allowlist. Creates (`201`) or toggles off (`204`). |
 | `DELETE` | `/api/v1/comments/:id/reactions/:emoji` | bearer | Idempotent removal. `204`. |
 
+### Reports
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| `POST` | `/api/v1/comments/:id/reports` | bearer | Flag a `Comment`. Body `{ reason }` (1–1000 chars). Creates an `open` `Report` (`201`). |
+
 ### Moderation
 
 | Method | Path | Auth | Description |
 | --- | --- | --- | --- |
-| `GET` | `/api/v1/moderation/queue` | `moderator`/`admin` | Pending comments with thread context and author name. |
-| `POST` | `/api/v1/moderation/actions` | `moderator`/`admin` | Body `{ commentId, action: "approve" \| "reject" \| "delete" }`. Approve → `published`, reject → `deleted`. `409` if approving/rejecting a non-pending comment. |
+| `GET` | `/api/v1/moderation/queue` | `moderator`/`admin` | Pending comments, plus published comments that carry an open `Report`, with thread context and author name. |
+| `GET` | `/api/v1/moderation/actions` | `admin` | `ModerationAction` audit log, newest first, with actor name. |
+| `POST` | `/api/v1/moderation/actions` | `moderator`/`admin` | Body `{ commentId, action: "approve" \| "reject" \| "delete" }`. Approve → `published` (dismisses open reports); reject/delete → `deleted` (resolves open reports). Writes an audit record. `409` if approving/rejecting a comment that is neither pending nor carrying an open report. |
 
 ### Users
 
@@ -218,11 +229,15 @@ await client.comments.create(thread.id, { bodyMd: "Hello **world**" }, accessTok
 const list = await client.comments.list(thread.id, undefined, accessToken);
 await client.comments.vote(list.comments[0].id, 1, accessToken);
 await client.comments.react(list.comments[0].id, "🎉", accessToken);
+await client.comments.report(list.comments[0].id, "spam", accessToken);
 await client.threads.unreact(thread.id, "🎉", accessToken);
 
 // Moderator/admin only:
 const queue = await client.moderation.queue(adminToken);
 await client.moderation.act(queue.comments[0].id, "approve", adminToken);
+
+// Admin only:
+const audit = await client.moderation.actions(adminToken);
 ```
 
 ### Media
@@ -271,6 +286,10 @@ clipboard — posts it directly to imgbb with the `media-api-key` and inserts
 `![image](url)` into the draft. For a custom provider, create the element and
 call `setMediaProvider(provider)` with any object satisfying the `MediaProvider`
 interface (`upload(file) => { url }`).
+
+Every comment also has a **Report** button. It opens an inline reason box and
+files a `Report` through `POST /api/v1/comments/:id/reports`; once submitted the
+button reads "Reported" and disables.
 
 ### Article reactions
 
@@ -350,17 +369,6 @@ lands, update it as follows.
 - **Web component:** document that in-progress drafts are persisted to
   `localStorage`, keyed by thread and parent comment, and cleared on successful
   submit. Note any new storage keys alongside `koe_access_token`/`koe_theme`.
-
-### 14 — Moderation: Reporting & Audit Log
-
-- **API reference:** add `POST /api/v1/comments/:id/reports`; update the queue
-  description to include published comments with open reports.
-- **API reference:** note that `POST /api/v1/moderation/actions` now writes an
-  audit record.
-- **Architecture/data model:** mention the `reports` and `moderation_actions`
-  tables (and `Report` / `ModerationAction` statuses).
-- **Web component:** document the per-comment "Report" button.
-- **Features:** add bullets for reporting and the moderation audit trail.
 
 ### 15 — Moderation: Ban & Suspend Users
 
