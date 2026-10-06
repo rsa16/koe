@@ -3,10 +3,12 @@ import { comments, Database, votes } from "@koe/db";
 import { and, eq, sql } from "drizzle-orm";
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { commentExists, parseCommentIdParam } from "../comment-scoped.js";
+import { RateLimitConfig, routeRateLimit } from "../plugins/rate-limit.js";
 import { withUniqueViolationRetry } from "../unique.js";
 
 export interface VotesRoutesOptions {
   db: Database;
+  rateLimits?: RateLimitConfig;
 }
 
 type VoteResult =
@@ -183,12 +185,22 @@ export default async function votesRoutes(
 
   app.post(
     "/api/v1/comments/:id/vote",
-    { preHandler: [app.authenticate, app.requireActiveUser] },
+    {
+      preHandler: [app.authenticate, app.requireActiveUser],
+      ...(options.rateLimits
+        ? routeRateLimit(options.rateLimits.votes, options.rateLimits.windowMs)
+        : {}),
+    },
     voteHandler
   );
   app.delete(
     "/api/v1/comments/:id/vote",
-    { preHandler: [app.authenticate, app.requireActiveUser] },
+    {
+      preHandler: [app.authenticate, app.requireActiveUser],
+      ...(options.rateLimits
+        ? routeRateLimit(options.rateLimits.votes, options.rateLimits.windowMs)
+        : {}),
+    },
     unvoteHandler
   );
 }

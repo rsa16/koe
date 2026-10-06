@@ -40,6 +40,10 @@ web component — with a Material admin UI at `/admin` for moderation.
   comments, voting, and reacting (reads still work).
 - **Banned-user content hiding**: comments authored by `banned` users are
   filtered out of comment listings while their rows are retained.
+- **Rate limiting & duplicate guard**: comment, vote, and reaction writes are
+  capped per `User` (guests fall back to their IP) by `@fastify/rate-limit`;
+  identical `body_md` from the same author inside the duplicate window is
+  rejected with `409`.
 - Admin-only role changes via `PATCH /api/v1/users/:id`.
 - **Admin UI** (`/admin`): a React + Material UI single-page app served by the
   API with a working Moderation Queue (pending and reported comments with
@@ -177,6 +181,11 @@ through.
 | `CLIENT_ORIGIN` | no | Origin the OAuth callback may `postMessage` back to. Defaults to `*`. |
 | `SESSION_SECRET` | no | Signing secret for admin session cookies. Defaults to `JWT_SECRET`. |
 | `ADMIN_DIST_PATH` | no | Filesystem path to the built admin SPA. Defaults to `apps/admin/dist`. If `index.html` is absent, `/admin` is not served. |
+| `RATE_LIMIT_WINDOW_MS` | no | Window for the comment/vote/reaction rate limits, in milliseconds. Default `60000`. |
+| `RATE_LIMIT_COMMENTS` | no | Max comment requests per window per `User`/IP. Default `10`. |
+| `RATE_LIMIT_VOTES` | no | Max vote requests per window per `User`/IP. Default `60`. |
+| `RATE_LIMIT_REACTIONS` | no | Max reaction requests per window per `User`/IP. Default `60`. |
+| `DUPLICATE_COMMENT_WINDOW_MS` | no | Reject an identical `body_md` from the same author within this window, in milliseconds. Default `30000`; `0` disables the guard. |
 
 All configuration is environment-only and read-only at runtime: the admin UI
 Settings page displays the effective values (`commentDepthCap`,
@@ -186,7 +195,9 @@ but cannot edit them. Change the environment and restart to reconfigure.
 ## API reference
 
 Base path `/api/v1`. All errors are RFC 9457 Problem Details. Authenticated
-endpoints expect `Authorization: Bearer <accessToken>`.
+endpoints expect `Authorization: Bearer <accessToken>`. Comment, vote, and
+reaction writes that exceed their rate limit return `429 Too Many Requests`
+(see [Configuration](#configuration)).
 
 ### Health
 
@@ -220,7 +231,7 @@ endpoints expect `Authorization: Bearer <accessToken>`.
 
 | Method | Path | Auth | Description |
 | --- | --- | --- | --- |
-| `POST` | `/api/v1/threads/:id/comments` | bearer | Create a `Comment`. Body `{ bodyMd, parentId? }`. `201`. Status is `pending` unless the thread has post-moderation. |
+| `POST` | `/api/v1/threads/:id/comments` | bearer | Create a `Comment`. Body `{ bodyMd, parentId? }`. `201`. Status is `pending` unless the thread has post-moderation. Identical `bodyMd` from the same author within `DUPLICATE_COMMENT_WINDOW_MS` is rejected with `409`; exceeding `RATE_LIMIT_COMMENTS` returns `429`. |
 | `GET` | `/api/v1/threads/:id/comments` | optional bearer | Paginated top-level comments with full nested subtrees inline. Query `page` (default 1), `pageSize` (default 20, max 100). Returns `{ comments, total, page, pageSize }`. With a bearer token, includes the caller's own `pending` comments plus their `userVote`/`userReactions` state. Comments authored by `banned` users are omitted (rows are retained, not deleted). |
 
 ### Votes
@@ -450,14 +461,6 @@ lands, update it as follows.
   `localStorage`, keyed by thread and parent comment, and cleared on successful
   submit. Note any new storage keys alongside `koe_access_token`/`koe_theme`.
 
-### 18 — Rate Limiting & Duplicate Guard
-
-- **Configuration:** add the new rate-limit env vars for comments, votes, and
-  reactions, plus the duplicate-window value.
-- **API reference:** document `429` responses and the duplicate-comment `409`
-  (or whichever status is chosen) for identical bodies within the window.
-- **Features:** add bullets for rate limiting and the duplicate-comment guard.
-
 ### 19 — Extensibility: Event Bus & Webhooks
 
 - **New "Extensibility" section:** list the event catalog (`comment.created`,
@@ -472,9 +475,5 @@ lands, update it as follows.
 - **Features:** add a bullet for signed outbound webhooks.
 
 ### Also worth noting when editing
-
-- Tickets 01, 02, and 03 carry the `ready-for-agent` label but are implemented
-  and marked complete in their checklists; this README treats them as done. If
-  their statuses are corrected upstream, no README change is needed.
 - When a `report`/`events` README change introduces a new **domain term**,
   update [`CONTEXT.md`](CONTEXT.md) first and use it verbatim.

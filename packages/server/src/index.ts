@@ -1,6 +1,10 @@
 import { buildApp } from "./app.js";
 import { createDbClient } from "@koe/db";
 import { createGoogleOAuthProvider } from "./oauth.js";
+import {
+  DEFAULT_DUPLICATE_COMMENT_WINDOW_MS,
+  DEFAULT_RATE_LIMIT_WINDOW_MS,
+} from "./plugins/rate-limit.js";
 import dotenv from "dotenv";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -36,6 +40,26 @@ const googleOAuth =
 
 const db = createDbClient(databaseUrl);
 
+function envInt(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) {
+    return fallback;
+  }
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : fallback;
+}
+
+const rateLimits = {
+  windowMs: envInt("RATE_LIMIT_WINDOW_MS", DEFAULT_RATE_LIMIT_WINDOW_MS),
+  comments: envInt("RATE_LIMIT_COMMENTS", 10),
+  votes: envInt("RATE_LIMIT_VOTES", 60),
+  reactions: envInt("RATE_LIMIT_REACTIONS", 60),
+  duplicateCommentWindowMs: envInt(
+    "DUPLICATE_COMMENT_WINDOW_MS",
+    DEFAULT_DUPLICATE_COMMENT_WINDOW_MS
+  ),
+};
+
 const adminDistPath = path.resolve(
   process.env.ADMIN_DIST_PATH ?? path.join(__dirname, "../../../apps/admin/dist")
 );
@@ -47,6 +71,7 @@ const app = buildApp({
   googleOAuth,
   clientOrigin: process.env.CLIENT_ORIGIN,
   reactionAllowlist,
+  rateLimits,
   adminDistPath,
   logger: true,
 });

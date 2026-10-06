@@ -13,11 +13,13 @@ import {
   parseCommentIdParam,
 } from "../comment-scoped.js";
 import { parseThreadIdParam, threadExists } from "../thread-scoped.js";
+import { RateLimitConfig, routeRateLimit } from "../plugins/rate-limit.js";
 import { withUniqueViolationRetry } from "../unique.js";
 
 export interface ReactionsRoutesOptions {
   db: Database;
   allowlist: string[];
+  rateLimits?: RateLimitConfig;
 }
 
 type TargetType = "comment" | "thread";
@@ -219,12 +221,28 @@ export default async function reactionsRoutes(
 
     app.post(
       `${basePath}/:id/reactions`,
-      { preHandler: [app.authenticate, app.requireActiveUser] },
+      {
+        preHandler: [app.authenticate, app.requireActiveUser],
+        ...(options.rateLimits
+          ? routeRateLimit(
+              options.rateLimits.reactions,
+              options.rateLimits.windowMs
+            )
+          : {}),
+      },
       reactHandler
     );
     app.delete(
       `${basePath}/:id/reactions/:emoji`,
-      { preHandler: [app.authenticate, app.requireActiveUser] },
+      {
+        preHandler: [app.authenticate, app.requireActiveUser],
+        ...(options.rateLimits
+          ? routeRateLimit(
+              options.rateLimits.reactions,
+              options.rateLimits.windowMs
+            )
+          : {}),
+      },
       unreactHandler
     );
   }

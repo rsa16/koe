@@ -10,9 +10,15 @@ import { renderMarkdown } from "@koe/renderer";
 import { and, eq, gt, inArray, notInArray, or, sql } from "drizzle-orm";
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { computeReplyPosition } from "../replies.js";
+import {
+  DEFAULT_DUPLICATE_COMMENT_WINDOW_MS,
+  RateLimitConfig,
+  routeRateLimit,
+} from "../plugins/rate-limit.js";
 
 export interface CommentsRoutesOptions {
   db: Database;
+  rateLimits?: RateLimitConfig;
 }
 
 export default async function commentsRoutes(
@@ -20,6 +26,9 @@ export default async function commentsRoutes(
   options: CommentsRoutesOptions
 ) {
   const { db } = options;
+  const duplicateCommentWindowMs =
+    options.rateLimits?.duplicateCommentWindowMs ??
+    DEFAULT_DUPLICATE_COMMENT_WINDOW_MS;
 
   // Comments: create
   // POST /api/v1/threads/:id/comments
@@ -93,6 +102,32 @@ export default async function commentsRoutes(
     const position = computeReplyPosition(
       parent ? { id: parent.id, depth: parent.depth, path: parent.path } : null
     );
+
+    if (duplicateCommentWindowMs > 0) {
+      const windowStart = new Date(Date.now() - duplicateCommentWindowMs);
+      const duplicates = await db
+        .select({ id: comments.id })
+        .from(comments)
+        .where(
+          and(
+            eq(comments.threadId, threadId),
+            eq(comments.authorId, request.user!.id),
+            eq(comments.bodyMd, bodyParsed.data.bodyMd),
+            gt(comments.createdAt, windowStart)
+          )
+        )
+        .limit(1);
+
+      if (duplicates.length > 0) {
+        return app.sendProblem(
+          reply,
+          409,
+          "Conflict",
+          "Duplicate comment detected",
+          request.url
+        );
+      }
+    }
 
     const created = await db.transaction(async (tx: Database) => {
       const [comment] = await tx
@@ -273,7 +308,12 @@ export default async function commentsRoutes(
 
   app.post(
     "/api/v1/threads/:id/comments",
-    { preHandler: [app.authenticate, app.requireActiveUser] },
+    {
+      preHandler: [app.authenticate, app.requireActiveUser],
+      ...(options.rateLimits
+        ? routeRateLimit(options.rateLimits.comments, options.rateLimits.windowMs)
+        : {}),
+    },
     createCommentHandler
   );
   app.get(

@@ -12,6 +12,7 @@ import { GoogleOAuthProvider } from "./oauth.js";
 import problemDetailsPlugin from "./plugins/problem-details.js";
 import authenticatePlugin from "./plugins/authenticate.js";
 import adminSessionPlugin from "./plugins/admin-session.js";
+import rateLimitPlugin, { RateLimitConfig } from "./plugins/rate-limit.js";
 
 import healthRoutes from "./routes/health.js";
 import authRoutes from "./routes/auth.js";
@@ -35,6 +36,7 @@ export interface BuildAppOptions {
   reactionAllowlist?: string[];
   sessionSecret?: string;
   adminDistPath?: string;
+  rateLimits?: RateLimitConfig;
 }
 
 export function registerAdminSpa(
@@ -92,6 +94,9 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   app.register(problemDetailsPlugin);
   app.register(authenticatePlugin, { jwtSecret, db: options.db });
   app.register(adminSessionPlugin, { db: options.db, sessionSecret });
+  if (options.rateLimits) {
+    app.register(rateLimitPlugin, { jwtSecret });
+  }
 
   app.register(healthRoutes);
   app.register(authRoutes, {
@@ -101,9 +106,19 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     googleOAuth,
   });
   app.register(threadsRoutes, { db: options.db });
-  app.register(commentsRoutes, { db: options.db });
-  app.register(votesRoutes, { db: options.db });
-  app.register(reactionsRoutes, { db: options.db, allowlist: reactionAllowlist });
+  app.register(commentsRoutes, {
+    db: options.db,
+    rateLimits: options.rateLimits,
+  });
+  app.register(votesRoutes, {
+    db: options.db,
+    rateLimits: options.rateLimits,
+  });
+  app.register(reactionsRoutes, {
+    db: options.db,
+    allowlist: reactionAllowlist,
+    rateLimits: options.rateLimits,
+  });
   app.register(reportsRoutes, { db: options.db });
   app.register(moderationRoutes, { db: options.db });
   app.register(usersRoutes, { db: options.db });
