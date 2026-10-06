@@ -27,6 +27,7 @@ export async function createDemoServer(options: DemoServerOptions = {}) {
     db,
     jwtSecret,
     logger: false,
+    adminDistPath: path.resolve(__dirname, "../../../apps/admin/dist"),
   });
 
   // Register static assets for demo widget and HTML page

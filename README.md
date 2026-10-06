@@ -2,7 +2,7 @@
 
 Self-hosted, headless commenting system. Own the full comment lifecycle behind a
 REST API (`/api/v1`) and consume it from a typed JavaScript SDK or a drop-in Lit
-web component — with a Material admin UI for moderation down the road.
+web component — with a Material admin UI at `/admin` for moderation.
 
 - **Backend:** Fastify + Drizzle ORM + PostgreSQL, TypeScript on Node.
 - **Contracts:** Zod schemas in `@koe/core` shared by the server and SDK.
@@ -13,8 +13,8 @@ web component — with a Material admin UI for moderation down the road.
 
 > **Status.** Built as tracer-bullet tickets (`.scratch/headless-comments/issues/`).
 > Tickets 01–10 plus 12 (media), 13 (article reactions), 14 (reporting & audit),
-> 15 (ban & suspend), 20 (route refactor) and 21 (demo) are implemented.
-> Tickets 11 and 16–19 are still open — see
+> 15 (ban & suspend), 16 (admin UI foundation), 20 (route refactor) and 21 (demo)
+> are implemented. Tickets 11 and 17–19 are still open — see
 > [README Maintenance](#readme-maintenance-unresolved-tickets).
 
 ## Features (available today)
@@ -40,6 +40,11 @@ web component — with a Material admin UI for moderation down the road.
 - **Banned-user content hiding**: comments authored by `banned` users are
   filtered out of comment listings while their rows are retained.
 - Admin-only role changes via `PATCH /api/v1/users/:id`.
+- **Admin UI** (`/admin`): a React + Material UI single-page app served by the
+  API with a working Moderation Queue (pending and reported comments with
+  Approve / Reject / Spam actions). It signs in by exchanging a moderator/admin
+  bearer token for a `SameSite=Lax` session cookie, and state-changing calls are
+  protected by a CSRF double-submit token.
 - Pluggable **Media** upload: the widget posts a selected image to imgbb with a
   client-side key and embeds the returned URL as `![image](url)`.
 - Drop-in `<koe-comments>` Lit web component (Tailwind styles, light/dark theme).
@@ -83,6 +88,7 @@ Domain vocabulary is fixed in [`CONTEXT.md`](CONTEXT.md) — use those exact ter
 | `packages/server` | `@koe/server` | Fastify REST API. Routes in `src/routes/`, shared plugins in `src/plugins/`. |
 | `packages/sdk` | `@koe/sdk` | Typed client wrapping the REST API; validates responses with `@koe/core`; exposes the pluggable media provider abstraction. |
 | `packages/widget` | `@koe/widget` | `<koe-comments>` Lit web component. |
+| `apps/admin` | `@koe/admin` | React + Vite + Material UI admin SPA, served by `@koe/server` at `/admin`. |
 | `apps/demo` | `@koe/demo` | Self-contained demo: PGlite DB + server + bundled widget + SDK walkthrough. |
 
 Build order matters: `@koe/server` consumes the built `dist/` of `core`, `db`,
@@ -125,6 +131,31 @@ bundled `<koe-comments>` widget on a demo page, seeds an admin user and demo
 thread, then runs an automated SDK walkthrough covering tickets 01–10. Append
 `?imgbbKey=YOUR_IMGBB_KEY` to the demo URL to enable client-side image uploads.
 
+### Admin UI
+
+The admin SPA is built by `@koe/admin` and served by `@koe/server` from the
+`apps/admin/dist` directory at `/admin`.
+
+```bash
+npm --workspace=@koe/admin run build   # → apps/admin/dist
+npm run build                          # or build every workspace (turbo)
+# then start the server (docker compose or `npm --workspace=@koe/server start`)
+# → http://localhost:3000/admin
+```
+
+For front-end development with hot reload against a running API on port 3000:
+
+```bash
+npm --workspace=@koe/admin run dev      # Vite dev server on :5174, proxies /api
+```
+
+Open `/admin` and sign in with a moderator or admin bearer access token (the demo
+prints a seeded admin token on startup). The server exchanges the token for a
+`SameSite=Lax`, `HttpOnly` session cookie plus a readable `koe_csrf` cookie; the
+SPA echoes that cookie back in the `x-csrf-token` header on every state-changing
+request. See [ADR 0001](docs/adr/0001-hybrid-cross-origin-auth.md) for why the
+public API uses bearer tokens while the admin UI uses cookies.
+
 ## Configuration
 
 All configuration is environment-based. The server reads environment variables
@@ -141,6 +172,8 @@ through.
 | `REACTION_ALLOWLIST` | no | Comma-separated emoji allowlist. Defaults to `👍,❤️,😂,🎉,😮,🙏`. |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_REDIRECT_URI` | no | Enables Google OAuth when all three are set. |
 | `CLIENT_ORIGIN` | no | Origin the OAuth callback may `postMessage` back to. Defaults to `*`. |
+| `SESSION_SECRET` | no | Signing secret for admin session cookies. Defaults to `JWT_SECRET`. |
+| `ADMIN_DIST_PATH` | no | Filesystem path to the built admin SPA. Defaults to `apps/admin/dist`. If `index.html` is absent, `/admin` is not served. |
 
 ## API reference
 
@@ -208,7 +241,7 @@ endpoints expect `Authorization: Bearer <accessToken>`.
 | --- | --- | --- | --- |
 | `GET` | `/api/v1/moderation/queue` | `moderator`/`admin` | Pending comments, plus published comments that carry an open `Report`, with thread context and author name. |
 | `GET` | `/api/v1/moderation/actions` | `admin` | `ModerationAction` audit log, newest first, with actor name. |
-| `POST` | `/api/v1/moderation/actions` | `moderator`/`admin` | **Comment actions.** Body `{ commentId, action: "approve" \| "reject" \| "delete" }`. Approve → `published` (dismisses open reports); reject/delete → `deleted` (resolves open reports). Writes an audit record. `409` if approving/rejecting a comment that is neither pending nor carrying an open report. |
+| `POST` | `/api/v1/moderation/actions` | `moderator`/`admin` | **Comment actions.** Body `{ commentId, action: "approve" \| "reject" \| "delete" \| "spam" }`. Approve → `published` (dismisses open reports); reject/delete → `deleted`; spam → `spam` (both resolve open reports). Writes an audit record. `409` if approving/rejecting a comment that is neither pending nor carrying an open report; delete and spam always apply. |
 | `POST` | `/api/v1/moderation/actions` | `moderator`/`admin` (`admin` only to ban) | **User actions.** Body `{ userId, action: "suspend" \| "ban" }`. Suspend → `suspended`; ban → `banned` and is restricted to `admin` (`403` for a `moderator`). Returns the updated `User` and writes an audit record with `targetType: "user"`. |
 
 Suspended and banned accounts are blocked from interacting: creating comments,
@@ -221,6 +254,22 @@ banned users' comments are hidden from listings as noted above.
 | Method | Path | Auth | Description |
 | --- | --- | --- | --- |
 | `PATCH` | `/api/v1/users/:id` | `admin` | Body `{ role }`. Changes a user's role. |
+
+### Admin UI API
+
+Routes used by the `/admin` single-page app. They authenticate with the
+`koe_admin_session` cookie (not bearer) and require a `moderator` or `admin`
+role. State-changing requests must send the `koe_csrf` cookie value back in the
+`x-csrf-token` header (CSRF double-submit); a missing or mismatched token is
+`403 application/problem+json`.
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| `POST` | `/api/v1/admin/session` | bearer (`moderator`/`admin`) | Exchanges an access token for an `HttpOnly` `koe_admin_session` cookie plus a readable `koe_csrf` cookie. Returns `{ user, csrfToken }`. `403` for `guest`/`member`. |
+| `GET` | `/api/v1/admin/session` | session cookie | Returns `{ user }` for the current session. |
+| `DELETE` | `/api/v1/admin/session` | session cookie + CSRF | Clears the session and CSRF cookies. `204`. |
+| `GET` | `/api/v1/admin/moderation/queue` | session cookie | Same payload as `GET /api/v1/moderation/queue`. |
+| `POST` | `/api/v1/admin/moderation/actions` | session cookie + CSRF | Same body/semantics as `POST /api/v1/moderation/actions`. |
 
 ## SDK
 
@@ -385,16 +434,6 @@ lands, update it as follows.
 - **Web component:** document that in-progress drafts are persisted to
   `localStorage`, keyed by thread and parent comment, and cleared on successful
   submit. Note any new storage keys alongside `koe_access_token`/`koe_theme`.
-
-### 16 — Admin UI Foundation
-
-- **Quick start:** add how to build/run the admin UI and where it is served
-  (`/admin`).
-- **Monorepo layout:** add the `apps/admin` (React + MUI + Vite) row.
-- **Auth/Architecture:** document the admin session-cookie + CSRF
-  double-submit flow alongside the bearer-token API auth (link ADR 0001).
-- **Features:** add a bullet for the admin moderation queue UI.
-- **Configuration:** add any admin-specific env vars (session secret, CSRF, etc.).
 
 ### 17 — Admin UI: Users & Settings
 

@@ -1,0 +1,1 @@
+ALTER TYPE "public"."moderation_action_verb" ADD VALUE 'spam' BEFORE 'ban';

@@ -2,8 +2,12 @@ import { buildApp } from "./app.js";
 import { createDbClient } from "@koe/db";
 import { createGoogleOAuthProvider } from "./oauth.js";
 import dotenv from "dotenv";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 dotenv.config();
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const port = Number(process.env.PORT || 3000);
 const host = process.env.HOST || "0.0.0.0";
@@ -31,12 +35,19 @@ const googleOAuth =
     : undefined;
 
 const db = createDbClient(databaseUrl);
+
+const adminDistPath = path.resolve(
+  process.env.ADMIN_DIST_PATH ?? path.join(__dirname, "../../../apps/admin/dist")
+);
+
 const app = buildApp({
   db,
   jwtSecret,
+  sessionSecret: process.env.SESSION_SECRET,
   googleOAuth,
   clientOrigin: process.env.CLIENT_ORIGIN,
   reactionAllowlist,
+  adminDistPath,
   logger: true,
 });
 

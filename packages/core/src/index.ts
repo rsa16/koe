@@ -245,7 +245,7 @@ export type CreateReportBody = z.infer<typeof CreateReportBodySchema>;
 export const ModerationTargetTypeSchema = z.enum(["comment", "user", "thread"]);
 export type ModerationTargetType = z.infer<typeof ModerationTargetTypeSchema>;
 
-const COMMENT_MODERATION_ACTIONS = ["approve", "reject", "delete"] as const;
+const COMMENT_MODERATION_ACTIONS = ["approve", "reject", "delete", "spam"] as const;
 const USER_MODERATION_ACTIONS = ["ban", "suspend"] as const;
 
 export const CommentModerationActionVerbSchema = z.enum(
@@ -352,6 +352,18 @@ export type OAuthCallbackQuery = z.infer<typeof OAuthCallbackQuerySchema>;
 
 export const OAuthCallbackResponseSchema = AnonymousAuthResponseSchema;
 export type OAuthCallbackResponse = AnonymousAuthResponse;
+
+// Admin UI session schemas
+export const AdminSessionSchema = z.object({
+  user: UserSchema,
+  csrfToken: z.string().min(1),
+});
+export type AdminSession = z.infer<typeof AdminSessionSchema>;
+
+export const AdminSessionUserSchema = z.object({
+  user: UserSchema,
+});
+export type AdminSessionUser = z.infer<typeof AdminSessionUserSchema>;
 
 // Session schemas
 export const SessionSchema = z.object({

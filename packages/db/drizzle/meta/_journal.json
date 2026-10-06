@@ -43,6 +43,13 @@
       "when": 1791289079938,
       "tag": "0005_large_vertigo",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791290051285,
+      "tag": "0006_minor_gamma_corps",
+      "breakpoints": true
     }
   ]
 }

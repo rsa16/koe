@@ -14,7 +14,7 @@ export async function createMemDb() {
     CREATE TYPE comment_status AS ENUM ('pending', 'published', 'spam', 'deleted');
     CREATE TYPE reaction_target_type AS ENUM ('comment', 'thread');
     CREATE TYPE report_status AS ENUM ('open', 'resolved', 'dismissed');
-    CREATE TYPE moderation_action_verb AS ENUM ('approve', 'reject', 'delete', 'ban', 'suspend');
+    CREATE TYPE moderation_action_verb AS ENUM ('approve', 'reject', 'delete', 'spam', 'ban', 'suspend');
     CREATE TYPE moderation_target_type AS ENUM ('comment', 'user', 'thread');
 
     CREATE TABLE users (

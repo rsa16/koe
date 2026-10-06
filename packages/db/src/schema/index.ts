@@ -8,7 +8,7 @@ export const threadStatusEnum = pgEnum("thread_status", ["open", "closed", "lock
 export const commentStatusEnum = pgEnum("comment_status", ["pending", "published", "spam", "deleted"]);
 export const reactionTargetTypeEnum = pgEnum("reaction_target_type", ["comment", "thread"]);
 export const reportStatusEnum = pgEnum("report_status", ["open", "resolved", "dismissed"]);
-export const moderationActionVerbEnum = pgEnum("moderation_action_verb", ["approve", "reject", "delete", "ban", "suspend"]);
+export const moderationActionVerbEnum = pgEnum("moderation_action_verb", ["approve", "reject", "delete", "spam", "ban", "suspend"]);
 export const moderationTargetTypeEnum = pgEnum("moderation_target_type", ["comment", "user", "thread"]);
 
 export const users = pgTable("users", {

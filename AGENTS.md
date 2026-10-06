@@ -14,8 +14,9 @@ Self-hosted headless commenting backend (Fastify + Drizzle ORM + PostgreSQL) wit
 - `packages/core`: Shared Zod schemas, TypeScript types, and event definitions (contracts consumed by server & SDK).
 - `packages/db`: Drizzle ORM schema, migration SQL (`drizzle/`), migration runner (`src/migrate.ts`), and PGlite in-memory test DB (`src/mem.ts`).
 - `packages/auth`: Bearer access-token signing/verification and admin session-cookie logic.
-- `packages/server`: Fastify REST API (`/api/v1`). Route registration lives in `src/routes/` (one file per domain group: `health.ts`, `auth.ts`, `threads.ts`); new endpoints for tickets 04–19 go there. Shared plumbing lives in `src/plugins/` — `problem-details.ts` decorates `app.sendProblem` (RFC 9457), `authenticate.ts` decorates `app.authenticate` (bearer preHandler). OAuth helpers in `src/oauth.ts`, `src/user-accounts.ts`, `src/oauth-render.ts`.
-- `apps/`: Planned web widget (Lit) and admin dashboard (React + MUI). Not created yet.
+- `packages/server`: Fastify REST API (`/api/v1`). Route registration lives in `src/routes/` (one file per domain group: `health.ts`, `auth.ts`, `threads.ts`); new endpoints for tickets 04–19 go there. Shared plumbing lives in `src/plugins/` — `problem-details.ts` decorates `app.sendProblem` (RFC 9457), `authenticate.ts` decorates `app.authenticate` (bearer preHandler), `admin-session.ts` decorates `app.adminAuthenticate`/`app.requireAdminRole`/`app.requireAdminCsrf` (session cookie + CSRF for the admin API). OAuth helpers in `src/oauth.ts`, `src/user-accounts.ts`, `src/oauth-render.ts`.
+- `apps/admin`: React + Vite + Material UI admin SPA (Moderation Queue), built to `dist/` and served by `@koe/server` at `/admin`.
+- `apps/demo`: Self-contained PGlite + server demo with the bundled widget and SDK walkthrough.
 
 ## Development & Testing Commands
 

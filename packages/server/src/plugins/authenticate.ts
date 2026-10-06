@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
 import fp from "fastify-plugin";
+import { extractBearerToken } from "../bearer.js";
 
 export interface AuthenticatePluginOptions {
   jwtSecret: string;
@@ -29,13 +30,6 @@ export default fp(async function authenticatePlugin(
     } catch {
       return null;
     }
-  }
-
-  function extractBearerToken(request: FastifyRequest): string | undefined {
-    const authHeader = request.headers.authorization;
-    return authHeader?.startsWith("Bearer ")
-      ? authHeader.slice(7).trim()
-      : undefined;
   }
 
   app.decorate(

@@ -1,5 +1,7 @@
 import {
+  CommentModerationActionVerb,
   CommentSchema,
+  CommentStatus,
   CreateModerationActionBodySchema,
   ModerationActionListResponseSchema,
   ModerationQueueResponseSchema,
@@ -21,12 +23,37 @@ export interface ModerationRoutesOptions {
   db: Database;
 }
 
-export default async function moderationRoutes(
-  app: FastifyInstance,
-  options: ModerationRoutesOptions
-) {
-  const { db } = options;
+const COMMENT_ACTION_EFFECTS: Record<
+  CommentModerationActionVerb,
+  {
+    nextStatus: CommentStatus;
+    reportStatus: "dismissed" | "resolved";
+    bypassesTransitionGuard: boolean;
+  }
+> = {
+  approve: {
+    nextStatus: "published",
+    reportStatus: "dismissed",
+    bypassesTransitionGuard: false,
+  },
+  reject: {
+    nextStatus: "deleted",
+    reportStatus: "resolved",
+    bypassesTransitionGuard: false,
+  },
+  delete: {
+    nextStatus: "deleted",
+    reportStatus: "resolved",
+    bypassesTransitionGuard: true,
+  },
+  spam: {
+    nextStatus: "spam",
+    reportStatus: "resolved",
+    bypassesTransitionGuard: true,
+  },
+};
 
+export function createModerationHandlers(app: FastifyInstance, db: Database) {
   // Moderation: queue
   // GET /api/v1/moderation/queue
   const queueHandler = async (
@@ -177,7 +204,13 @@ export default async function moderationRoutes(
       .limit(1);
     const hasOpenReports = openReports.length > 0;
 
-    if (action !== "delete" && found[0].status !== "pending" && !hasOpenReports) {
+    const effect = COMMENT_ACTION_EFFECTS[action];
+
+    if (
+      !effect.bypassesTransitionGuard &&
+      found[0].status !== "pending" &&
+      !hasOpenReports
+    ) {
       return app.sendProblem(
         reply,
         409,
@@ -187,8 +220,8 @@ export default async function moderationRoutes(
       );
     }
 
-    const status = action === "approve" ? "published" : "deleted";
-    const reportStatus = action === "approve" ? "dismissed" : "resolved";
+    const status = effect.nextStatus;
+    const reportStatus = effect.reportStatus;
 
     const updated = await db.transaction(async (tx: Database) => {
       const [comment] = await tx
@@ -245,6 +278,18 @@ export default async function moderationRoutes(
       })
     );
   };
+
+  return { queueHandler, actionHandler, auditHandler };
+}
+
+export default async function moderationRoutes(
+  app: FastifyInstance,
+  options: ModerationRoutesOptions
+) {
+  const { queueHandler, actionHandler, auditHandler } = createModerationHandlers(
+    app,
+    options.db
+  );
 
   app.get(
     "/api/v1/moderation/queue",

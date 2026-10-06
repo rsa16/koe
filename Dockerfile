@@ -7,12 +7,14 @@ COPY package.json package-lock.json turbo.json tsconfig.base.json ./
 COPY packages/core/package.json packages/core/package.json
 COPY packages/db/package.json packages/db/package.json
 COPY packages/server/package.json packages/server/package.json
+COPY apps/admin/package.json apps/admin/package.json
 
 # Install dependencies across all workspaces
 RUN npm ci
 
 # Copy package source code
 COPY packages ./packages
+COPY apps/admin ./apps/admin
 
 # Build all packages via Turborepo
 RUN npm run build
@@ -27,6 +29,7 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/package-lock.json ./package-lock.json
 COPY --from=build /app/packages ./packages
+COPY --from=build /app/apps ./apps
 
 EXPOSE 3000
 CMD ["node", "packages/server/dist/index.js"]
