@@ -1,11 +1,13 @@
 import {
   CommentNode,
+  createImgbbMediaProvider,
   createKoeClient,
   DEFAULT_EMOJI_ALLOWLIST,
   KoeApiError,
   KoeClient,
+  MediaProvider,
 } from "@koe/sdk";
-import { html, LitElement, nothing, TemplateResult } from "lit";
+import { html, LitElement, nothing, PropertyValues, TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { tailwindStyles } from "./generated/tailwind.styles.js";
@@ -98,6 +100,8 @@ const ICON_PATHS = {
   link: "M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244",
   image:
     "m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909M6 20.25h12A2.25 2.25 0 0 0 20.25 18V6A2.25 2.25 0 0 0 18 3.75H6A2.25 2.25 0 0 0 3.75 6v12A2.25 2.25 0 0 0 6 20.25Zm10.5-11.25h.008v.008H16.5V9Z",
+  upload:
+    "M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 7.5m0 0L7.5 12m4.5-4.5V21",
   smile:
     "M15.182 15.182a4.5 4.5 0 0 1-6.364 0M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0ZM9.75 9.75c0 .414-.168.75-.375.75S9 10.164 9 9.75 9.168 9 9.375 9s.375.336.375.75Zm-.375 0h.008v.015h-.008V9.75Zm5.25 0c0 .414-.168.75-.375.75s-.375-.336-.375-.75.168-.75.375-.75.375.336.375.75Z",
   chevronUp: "m4.5 15.75 7.5-7.5 7.5 7.5",
@@ -126,6 +130,9 @@ export class KoeComments extends LitElement {
   @property({ type: String, attribute: "gif-api-key" })
   gifApiKey = "";
 
+  @property({ type: String, attribute: "media-api-key" })
+  mediaApiKey = "";
+
   @state() private comments: CommentNode[] = [];
   @state() private threadId = "";
   @state() private loading = true;
@@ -148,9 +155,11 @@ export class KoeComments extends LitElement {
   @state() private gifLoading = false;
   @state() private gifError = "";
   @state() private gifUrl = "";
+  @state() private uploadingScope: string | null = null;
 
   private client: KoeClient | null = null;
   private token = "";
+  private mediaProvider: MediaProvider | null = null;
   private gifDebounce: number | undefined;
   private gifAbort: AbortController | null = null;
 
@@ -186,6 +195,14 @@ export class KoeComments extends LitElement {
     this.gifAbort?.abort();
   }
 
+  protected willUpdate(changed: PropertyValues) {
+    if (changed.has("mediaApiKey")) {
+      this.mediaProvider = this.mediaApiKey
+        ? createImgbbMediaProvider({ apiKey: this.mediaApiKey })
+        : null;
+    }
+  }
+
   private handleExternalThemeChange = (e: Event) => {
     const theme = (e as CustomEvent<{ theme?: string }>).detail?.theme;
     if (theme === "light" || theme === "dark") {
@@ -215,6 +232,11 @@ export class KoeComments extends LitElement {
 
   private toggleTheme() {
     this.setTheme(this.theme === "dark" ? "light" : "dark");
+  }
+
+  setMediaProvider(provider: MediaProvider | null) {
+    this.mediaProvider = provider;
+    this.requestUpdate();
   }
 
   private async loadThread() {
@@ -310,7 +332,8 @@ export class KoeComments extends LitElement {
     if (
       scope &&
       !this.draftFor(scope).trim() &&
-      this.openGifPicker !== scope
+      this.openGifPicker !== scope &&
+      this.uploadingScope !== scope
     ) {
       this.activeScope = null;
     }
@@ -320,7 +343,8 @@ export class KoeComments extends LitElement {
     return (
       this.activeScope === scope ||
       this.draftFor(scope).trim() !== "" ||
-      this.openGifPicker === scope
+      this.openGifPicker === scope ||
+      this.uploadingScope === scope
     );
   }
 
@@ -483,6 +507,38 @@ export class KoeComments extends LitElement {
       return;
     }
     await this.insertGif(scope, url);
+  }
+
+  private openMediaPicker(scope: string) {
+    const input = Array.from(
+      this.renderRoot.querySelectorAll<HTMLInputElement>(
+        "input[data-media-scope]"
+      )
+    ).find((el) => el.dataset.mediaScope === scope);
+    input?.click();
+  }
+
+  private async handleMediaSelected(scope: string, e: Event) {
+    const input = e.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = "";
+    if (!file) {
+      return;
+    }
+    if (!this.mediaProvider) {
+      this.error = "Image upload is not configured";
+      return;
+    }
+    this.uploadingScope = scope;
+    this.error = "";
+    try {
+      const { url } = await this.mediaProvider.upload(file);
+      await this.insertText(scope, `![image](${url})`);
+    } catch (err) {
+      this.error = err instanceof Error ? err.message : "Failed to upload image";
+    } finally {
+      this.uploadingScope = null;
+    }
   }
 
   private handleInput(e: Event) {
@@ -794,6 +850,13 @@ export class KoeComments extends LitElement {
             ? "border-slate-300 shadow-sm ring-4 ring-slate-900/5 dark:border-slate-600 dark:ring-white/5"
             : "border-slate-200 hover:border-slate-300 dark:border-slate-700 dark:hover:border-slate-600"}"
         >
+          <input
+            type="file"
+            accept="image/*"
+            class="hidden"
+            data-media-scope=${scope}
+            @change=${(e: Event) => this.handleMediaSelected(scope, e)}
+          />
           ${active ? this.renderToolbar(scope) : nothing}
           <textarea
             rows=${options.rows}
@@ -942,6 +1005,27 @@ export class KoeComments extends LitElement {
             GIF
           </span>
         </button>
+        ${this.mediaProvider
+          ? html`
+              <button
+                type="button"
+                class="media-upload-button flex h-8 items-center justify-center gap-1.5 rounded-lg px-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                aria-label="Upload image"
+                title=${this.uploadingScope === scope
+                  ? "Uploading..."
+                  : "Upload image"}
+                ?disabled=${this.uploadingScope === scope}
+                @mousedown=${preventFocus}
+                @click=${() => this.openMediaPicker(scope)}
+              >
+                ${this.icon(
+                  this.uploadingScope === scope
+                    ? ICON_PATHS.image
+                    : ICON_PATHS.upload
+                )}
+              </button>
+            `
+          : nothing}
       </div>
     `;
   }

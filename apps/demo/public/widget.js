@@ -504,15 +504,15 @@ var makeIssue = (params) => {
       message: issueData.message
     };
   }
-  let errorMessage = "";
+  let errorMessage2 = "";
   const maps = errorMaps.filter((m2) => !!m2).slice().reverse();
   for (const map of maps) {
-    errorMessage = map(fullIssue, { data, defaultError: errorMessage }).message;
+    errorMessage2 = map(fullIssue, { data, defaultError: errorMessage2 }).message;
   }
   return {
     ...issueData,
     path: fullPath,
-    message: errorMessage
+    message: errorMessage2
   };
 };
 var EMPTY_PATH = [];
@@ -4226,6 +4226,56 @@ var ProblemDetailsSchema = external_exports.object({
   errors: external_exports.unknown().optional()
 });
 
+// ../../packages/sdk/dist/media.js
+var MediaUploadError = class extends Error {
+  status;
+  constructor(message, options = {}) {
+    super(message);
+    this.name = "MediaUploadError";
+    this.status = options.status;
+  }
+};
+var IMGBB_ENDPOINT = "https://api.imgbb.com/1/upload";
+var ImgbbResponseSchema = external_exports.object({
+  data: external_exports.object({ url: external_exports.string() }).optional(),
+  success: external_exports.boolean().optional(),
+  error: external_exports.object({ message: external_exports.string() }).optional()
+});
+function errorMessage(payload, fallback) {
+  const parsed = ImgbbResponseSchema.safeParse(payload);
+  if (parsed.success && parsed.data.error?.message) {
+    return parsed.data.error.message;
+  }
+  return fallback;
+}
+function createImgbbMediaProvider(options) {
+  if (!options.apiKey) {
+    throw new Error("imgbb API key is required");
+  }
+  const fetchFn = options.fetch ?? globalThis.fetch;
+  const url = `${IMGBB_ENDPOINT}?key=${encodeURIComponent(options.apiKey)}`;
+  return {
+    async upload(file) {
+      const form = new FormData();
+      form.append("image", file);
+      const response = await fetchFn(url, { method: "POST", body: form });
+      let payload = void 0;
+      try {
+        payload = await response.json();
+      } catch {
+      }
+      if (!response.ok) {
+        throw new MediaUploadError(errorMessage(payload, `imgbb upload failed (${response.status})`), { status: response.status });
+      }
+      const parsed = ImgbbResponseSchema.safeParse(payload);
+      if (!parsed.success || parsed.data.success === false || !parsed.data.data?.url) {
+        throw new MediaUploadError(errorMessage(payload, "imgbb upload failed"), { status: response.status });
+      }
+      return { url: parsed.data.data.url };
+    }
+  };
+}
+
 // ../../packages/sdk/dist/index.js
 var KoeApiError = class extends Error {
   status;
@@ -5038,6 +5088,7 @@ var ICON_PATHS = {
   code: "M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5",
   link: "M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244",
   image: "m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909M6 20.25h12A2.25 2.25 0 0 0 20.25 18V6A2.25 2.25 0 0 0 18 3.75H6A2.25 2.25 0 0 0 3.75 6v12A2.25 2.25 0 0 0 6 20.25Zm10.5-11.25h.008v.008H16.5V9Z",
+  upload: "M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 7.5m0 0L7.5 12m4.5-4.5V21",
   smile: "M15.182 15.182a4.5 4.5 0 0 1-6.364 0M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0ZM9.75 9.75c0 .414-.168.75-.375.75S9 10.164 9 9.75 9.168 9 9.375 9s.375.336.375.75Zm-.375 0h.008v.015h-.008V9.75Zm5.25 0c0 .414-.168.75-.375.75s-.375-.336-.375-.75.168-.75.375-.75.375.336.375.75Z",
   chevronUp: "m4.5 15.75 7.5-7.5 7.5 7.5",
   chevronDown: "m19.5 8.25-7.5 7.5-7.5-7.5",
@@ -5054,6 +5105,7 @@ var KoeComments = class extends i4 {
     this.threadRef = "";
     this.reactionEmojis = "";
     this.gifApiKey = "";
+    this.mediaApiKey = "";
     this.comments = [];
     this.threadId = "";
     this.loading = true;
@@ -5076,8 +5128,10 @@ var KoeComments = class extends i4 {
     this.gifLoading = false;
     this.gifError = "";
     this.gifUrl = "";
+    this.uploadingScope = null;
     this.client = null;
     this.token = "";
+    this.mediaProvider = null;
     this.gifAbort = null;
     this.handleExternalThemeChange = (e7) => {
       const theme = e7.detail?.theme;
@@ -5108,6 +5162,11 @@ var KoeComments = class extends i4 {
     window.clearTimeout(this.gifDebounce);
     this.gifAbort?.abort();
   }
+  willUpdate(changed) {
+    if (changed.has("mediaApiKey")) {
+      this.mediaProvider = this.mediaApiKey ? createImgbbMediaProvider({ apiKey: this.mediaApiKey }) : null;
+    }
+  }
   initTheme() {
     const stored = localStorage.getItem(THEME_KEY);
     if (stored === "dark" || stored === "light") {
@@ -5126,6 +5185,10 @@ var KoeComments = class extends i4 {
   }
   toggleTheme() {
     this.setTheme(this.theme === "dark" ? "light" : "dark");
+  }
+  setMediaProvider(provider) {
+    this.mediaProvider = provider;
+    this.requestUpdate();
   }
   async loadThread() {
     this.loading = true;
@@ -5207,12 +5270,12 @@ var KoeComments = class extends i4 {
       return;
     }
     const scope = this.activeScope;
-    if (scope && !this.draftFor(scope).trim() && this.openGifPicker !== scope) {
+    if (scope && !this.draftFor(scope).trim() && this.openGifPicker !== scope && this.uploadingScope !== scope) {
       this.activeScope = null;
     }
   }
   isActive(scope) {
-    return this.activeScope === scope || this.draftFor(scope).trim() !== "" || this.openGifPicker === scope;
+    return this.activeScope === scope || this.draftFor(scope).trim() !== "" || this.openGifPicker === scope || this.uploadingScope === scope;
   }
   async wrapSelection(scope, prefix, suffix, placeholder) {
     const textarea = this.textareaFor(scope);
@@ -5353,6 +5416,36 @@ var KoeComments = class extends i4 {
       return;
     }
     await this.insertGif(scope, url);
+  }
+  openMediaPicker(scope) {
+    const input = Array.from(
+      this.renderRoot.querySelectorAll(
+        "input[data-media-scope]"
+      )
+    ).find((el) => el.dataset.mediaScope === scope);
+    input?.click();
+  }
+  async handleMediaSelected(scope, e7) {
+    const input = e7.target;
+    const file = input.files?.[0];
+    input.value = "";
+    if (!file) {
+      return;
+    }
+    if (!this.mediaProvider) {
+      this.error = "Image upload is not configured";
+      return;
+    }
+    this.uploadingScope = scope;
+    this.error = "";
+    try {
+      const { url } = await this.mediaProvider.upload(file);
+      await this.insertText(scope, `![image](${url})`);
+    } catch (err) {
+      this.error = err instanceof Error ? err.message : "Failed to upload image";
+    } finally {
+      this.uploadingScope = null;
+    }
   }
   handleInput(e7) {
     this.draft = e7.target.value;
@@ -5622,6 +5715,13 @@ var KoeComments = class extends i4 {
         <div
           class="composer-shell relative min-w-0 flex-1 rounded-2xl border bg-white transition-all duration-200 dark:bg-slate-900 ${active ? "border-slate-300 shadow-sm ring-4 ring-slate-900/5 dark:border-slate-600 dark:ring-white/5" : "border-slate-200 hover:border-slate-300 dark:border-slate-700 dark:hover:border-slate-600"}"
         >
+          <input
+            type="file"
+            accept="image/*"
+            class="hidden"
+            data-media-scope=${scope}
+            @change=${(e7) => this.handleMediaSelected(scope, e7)}
+          />
           ${active ? this.renderToolbar(scope) : A}
           <textarea
             rows=${options.rows}
@@ -5756,6 +5856,21 @@ var KoeComments = class extends i4 {
             GIF
           </span>
         </button>
+        ${this.mediaProvider ? b2`
+              <button
+                type="button"
+                class="media-upload-button flex h-8 items-center justify-center gap-1.5 rounded-lg px-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                aria-label="Upload image"
+                title=${this.uploadingScope === scope ? "Uploading..." : "Upload image"}
+                ?disabled=${this.uploadingScope === scope}
+                @mousedown=${preventFocus}
+                @click=${() => this.openMediaPicker(scope)}
+              >
+                ${this.icon(
+      this.uploadingScope === scope ? ICON_PATHS.image : ICON_PATHS.upload
+    )}
+              </button>
+            ` : A}
       </div>
     `;
   }
@@ -6045,6 +6160,9 @@ __decorateClass([
   n4({ type: String, attribute: "gif-api-key" })
 ], KoeComments.prototype, "gifApiKey", 2);
 __decorateClass([
+  n4({ type: String, attribute: "media-api-key" })
+], KoeComments.prototype, "mediaApiKey", 2);
+__decorateClass([
   r5()
 ], KoeComments.prototype, "comments", 2);
 __decorateClass([
@@ -6110,6 +6228,9 @@ __decorateClass([
 __decorateClass([
   r5()
 ], KoeComments.prototype, "gifUrl", 2);
+__decorateClass([
+  r5()
+], KoeComments.prototype, "uploadingScope", 2);
 KoeComments = __decorateClass([
   t3("koe-comments")
 ], KoeComments);

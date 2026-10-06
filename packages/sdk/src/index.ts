@@ -46,6 +46,17 @@ export type {
 
 export { DEFAULT_EMOJI_ALLOWLIST } from "@koe/core";
 
+export {
+  createImgbbMediaProvider,
+  MediaUploadError,
+} from "./media.js";
+export type {
+  ImgbbMediaProviderOptions,
+  MediaProvider,
+  MediaUploadErrorOptions,
+  MediaUploadResult,
+} from "./media.js";
+
 export interface KoeApiErrorOptions {
   status: number;
   title: string;

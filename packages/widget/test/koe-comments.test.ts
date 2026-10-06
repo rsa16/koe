@@ -128,6 +128,17 @@ describe("<koe-comments> widget", () => {
     await client.comments.react(commentId, emoji, accessToken);
   }
 
+  function selectMediaFile(element: KoeComments, file: File) {
+    const input = element.shadowRoot!.querySelector(
+      ".composer input[type='file']"
+    ) as HTMLInputElement;
+    Object.defineProperty(input, "files", {
+      value: [file],
+      configurable: true,
+    });
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
   it("authenticates anonymously and renders an empty comment list", async () => {
     const element = mount("widget-empty");
 
@@ -263,6 +274,109 @@ describe("<koe-comments> widget", () => {
     const nested = element.shadowRoot!.querySelector(".comment-list--nested");
     expect(nested).not.toBeNull();
     expect(nested?.textContent).toContain("Inline reply text");
+  });
+
+  it("hides the image upload button until a media provider is configured", async () => {
+    const element = mount("widget-media-off");
+    await waitFor(() => element.shadowRoot?.querySelector(".empty") !== null);
+
+    const textarea = element.shadowRoot!.querySelector("textarea")!;
+    textarea.value = "A draft";
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    await element.updateComplete;
+
+    expect(
+      element.shadowRoot!.querySelector(".media-upload-button")
+    ).toBeNull();
+  });
+
+  it("uploads a selected image via the media provider and inserts markdown", async () => {
+    const element = mount("widget-media");
+    await waitFor(() => element.shadowRoot?.querySelector(".empty") !== null);
+
+    const uploads: Blob[] = [];
+    element.setMediaProvider({
+      upload: async (file) => {
+        uploads.push(file);
+        return { url: "https://i.ibb.co/abc/pic.png" };
+      },
+    });
+
+    const textarea = element.shadowRoot!.querySelector("textarea")!;
+    textarea.value = "Look: ";
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    await element.updateComplete;
+
+    const uploadButton = element.shadowRoot!.querySelector(
+      ".media-upload-button"
+    ) as HTMLButtonElement;
+    expect(uploadButton).not.toBeNull();
+    uploadButton.click();
+    await element.updateComplete;
+
+    selectMediaFile(
+      element,
+      new File(["bytes"], "cat.png", { type: "image/png" })
+    );
+
+    await waitFor(() =>
+      (element.shadowRoot!.querySelector("textarea") as HTMLTextAreaElement).value.includes(
+        "![image](https://i.ibb.co/abc/pic.png)"
+      )
+    );
+
+    expect(uploads).toHaveLength(1);
+    expect(uploads[0]).toBeInstanceOf(File);
+  });
+
+  it("creates an imgbb provider from the media-api-key attribute", async () => {
+    const realFetch = globalThis.fetch;
+    const imgbbCalls: string[] = [];
+    globalThis.fetch = (async (input, init) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.startsWith("https://api.imgbb.com")) {
+        imgbbCalls.push(url);
+        return new Response(
+          JSON.stringify({
+            data: { url: "https://i.ibb.co/attr/pic.png" },
+            success: true,
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }
+        );
+      }
+      return realFetch(input, init);
+    }) as typeof globalThis.fetch;
+
+    try {
+      document.body.innerHTML = `<koe-comments base-url="${baseUrl}" thread-ref="widget-media-attr" media-api-key="client-key"></koe-comments>`;
+      const element = document.querySelector("koe-comments") as KoeComments;
+      await waitFor(() => element.shadowRoot?.querySelector(".empty") !== null);
+
+      const textarea = element.shadowRoot!.querySelector("textarea")!;
+      textarea.value = "From attribute: ";
+      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+      await element.updateComplete;
+
+      selectMediaFile(
+        element,
+        new File(["bytes"], "dog.png", { type: "image/png" })
+      );
+
+      await waitFor(() =>
+        (element.shadowRoot!.querySelector("textarea") as HTMLTextAreaElement).value.includes(
+          "![image](https://i.ibb.co/attr/pic.png)"
+        )
+      );
+
+      expect(imgbbCalls[0]).toBe(
+        "https://api.imgbb.com/1/upload?key=client-key"
+      );
+    } finally {
+      globalThis.fetch = realFetch;
+    }
   });
 
   it("shows the top three reactions with an expand toggle and an add button", async () => {
