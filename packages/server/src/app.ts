@@ -34,6 +34,7 @@ export interface BuildAppOptions {
   googleOAuth?: GoogleOAuthProvider;
   clientOrigin?: string;
   reactionAllowlist?: string[];
+  preModerationDefault?: boolean;
   sessionSecret?: string;
   adminDistPath?: string;
   rateLimits?: RateLimitConfig;
@@ -84,6 +85,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   const reactionAllowlist = EmojiAllowlistSchema.parse(
     options.reactionAllowlist ?? DEFAULT_EMOJI_ALLOWLIST
   );
+  const preModerationDefault = options.preModerationDefault ?? false;
 
   app.register(sensible);
   app.register(cookie);
@@ -105,7 +107,10 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     clientOrigin,
     googleOAuth,
   });
-  app.register(threadsRoutes, { db: options.db });
+  app.register(threadsRoutes, {
+    db: options.db,
+    preModerationDefault,
+  });
   app.register(commentsRoutes, {
     db: options.db,
     rateLimits: options.rateLimits,
@@ -126,6 +131,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   app.register(adminUsersRoutes, { db: options.db });
   app.register(adminSettingsRoutes, {
     reactionAllowlist,
+    preModerationDefault,
     googleOAuthEnabled: Boolean(googleOAuth),
   });
 

@@ -3,6 +3,7 @@ import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
 export interface AdminSettingsRoutesOptions {
   reactionAllowlist: string[];
+  preModerationDefault: boolean;
   googleOAuthEnabled: boolean;
 }
 
@@ -10,7 +11,8 @@ export default async function adminSettingsRoutes(
   app: FastifyInstance,
   options: AdminSettingsRoutesOptions
 ) {
-  const { reactionAllowlist, googleOAuthEnabled } = options;
+  const { reactionAllowlist, preModerationDefault, googleOAuthEnabled } =
+    options;
 
   // Admin: read-only effective configuration
   // GET /api/v1/admin/settings
@@ -22,7 +24,7 @@ export default async function adminSettingsRoutes(
       AdminSettingsSchema.parse({
         commentDepthCap: COMMENT_DEPTH_CAP,
         reactionAllowlist,
-        preModerationDefault: true,
+        preModerationDefault,
         googleOAuthEnabled,
       })
     );

@@ -18,7 +18,12 @@ describe("Moderation API Seam Integration Tests", () => {
   beforeEach(async () => {
     const { db } = await createMemDb();
     memDb = db;
-    app = buildApp({ db, jwtSecret, logger: false });
+    app = buildApp({
+      db,
+      jwtSecret,
+      logger: false,
+      preModerationDefault: true,
+    });
     await app.ready();
   });
 

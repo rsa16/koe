@@ -9,13 +9,14 @@ import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
 export interface ThreadsRoutesOptions {
   db: Database;
+  preModerationDefault: boolean;
 }
 
 export default async function threadsRoutes(
   app: FastifyInstance,
   options: ThreadsRoutesOptions
 ) {
-  const { db } = options;
+  const { db, preModerationDefault } = options;
 
   async function userReactionsFor(
     threadId: string,
@@ -82,7 +83,7 @@ export default async function threadsRoutes(
         title: title || null,
         url: url || null,
         status: "open",
-        preModeration: true,
+        preModeration: preModerationDefault,
         commentCount: 0,
         reactionTotals: {},
         metadata: {},

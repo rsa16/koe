@@ -43,7 +43,7 @@ describe("Server API Seam Integration Tests", () => {
     expect(body.title).toBe("My Test Post");
     expect(body.url).toBe("https://example.com/post/123");
     expect(body.status).toBe("open");
-    expect(body.preModeration).toBe(true);
+    expect(body.preModeration).toBe(false);
     expect(body.commentCount).toBe(0);
     expect(body.id).toBeDefined();
 
@@ -54,6 +54,30 @@ describe("Server API Seam Integration Tests", () => {
       updatedAt: new Date(body.updatedAt),
     });
     expect(parseResult.success).toBe(true);
+  });
+
+  it("publishes comments immediately when pre-moderation is off", async () => {
+    const threadResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/threads/by-ref/default-moderation",
+    });
+    const threadId = threadResponse.json().id;
+
+    const authResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/anonymous",
+    });
+    const token = authResponse.json().accessToken;
+
+    const commentResponse = await app.inject({
+      method: "POST",
+      url: `/api/v1/threads/${threadId}/comments`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { bodyMd: "No queue for me" },
+    });
+
+    expect(commentResponse.statusCode).toBe(201);
+    expect(commentResponse.json().status).toBe("published");
   });
 
   it("GET /api/v1/threads/by-ref/:ref returns existing thread on subsequent requests without creating duplicate", async () => {
