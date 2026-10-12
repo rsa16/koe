@@ -179,6 +179,7 @@ through.
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` / `POSTGRES_PORT` | compose only | Used by the bundled Postgres service. |
 | `REACTION_ALLOWLIST` | no | Comma-separated emoji allowlist. Defaults to `👍,❤️,😂,🎉,😮,🙏`. |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_REDIRECT_URI` | no | Enables Google OAuth when all three are set. |
+| `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET` / `DISCORD_REDIRECT_URI` | no | Enables Discord OAuth when all three are set. |
 | `CLIENT_ORIGIN` | no | Origin the OAuth callback may `postMessage` back to. Defaults to `*`. |
 | `SESSION_SECRET` | no | Signing secret for admin session cookies. Defaults to `JWT_SECRET`. |
 | `ADMIN_DIST_PATH` | no | Filesystem path to the built admin SPA. Defaults to `apps/admin/dist`. If `index.html` is absent, `/admin` is not served. |
@@ -190,8 +191,9 @@ through.
 
 All configuration is environment-only and read-only at runtime: the admin UI
 Settings page displays the effective values (`commentDepthCap`,
-`reactionAllowlist`, pre-moderation default, whether Google OAuth is configured)
-but cannot edit them. Change the environment and restart to reconfigure.
+`reactionAllowlist`, pre-moderation default, whether Google/Discord OAuth is
+configured) but cannot edit them. Change the environment and restart to
+reconfigure.
 
 ## API reference
 

@@ -106,6 +106,12 @@ export default function SettingsPage() {
               </Typography>
             </SettingRow>
             <Divider />
+            <SettingRow label="Discord OAuth">
+              <Typography variant="body1">
+                {settings.discordOAuthEnabled ? "Configured" : "Not configured"}
+              </Typography>
+            </SettingRow>
+            <Divider />
             <SettingRow label="Reaction allowlist">
               <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
                 {settings.reactionAllowlist.map((emoji) => (

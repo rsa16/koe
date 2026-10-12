@@ -7,6 +7,6 @@
 - **Report**: Flag on a comment; `open|resolved|dismissed`.
 - **Draft**: Client-side `localStorage` only (no server storage).
 - **User**: Account with role `guest|member|moderator|admin`, status `active|suspended|banned`.
-- **Identity**: One per login method (`anonymous|google|github|x`); many → one User, merged on login.
+- **Identity**: One per login method (`anonymous|google|discord|github|x`); many → one User, merged on login.
 - **Media**: Client-side upload via pluggable provider (imgbb), key in client; returns URL to embed.
 - **ModerationAction**: Audit of approve/reject/delete/spam/ban/suspend/lock.

@@ -6,6 +6,7 @@ import {
 } from "@koe/auth";
 import {
   AnonymousAuthResponseSchema,
+  IdentityProvider,
   OAuthCallbackQuerySchema,
   OAuthCallbackResponseSchema,
   OAuthStartQuerySchema,
@@ -19,13 +20,15 @@ import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import crypto from "node:crypto";
 import { renderOAuthSuccessPage, sendOAuthErrorPage } from "../oauth-render.js";
 import {
-  generateCodeVerifier,
-  generateState,
+  DISCORD_OAUTH_SCOPES,
+  DiscordOAuthProvider,
   GOOGLE_OAUTH_SCOPES,
   GoogleOAuthProvider,
-  GoogleUserInfo,
+  OAuthProvider,
+  generateCodeVerifier,
+  generateState,
 } from "../oauth.js";
-import { resolveGoogleUser } from "../user-accounts.js";
+import { resolveOAuthUser } from "../user-accounts.js";
 
 const OAUTH_STATE_COOKIE = "koe_oauth_state";
 
@@ -34,13 +37,24 @@ export interface AuthRoutesOptions {
   jwtSecret: string;
   clientOrigin: string;
   googleOAuth?: GoogleOAuthProvider;
+  discordOAuth?: DiscordOAuthProvider;
+}
+
+interface OAuthProviderRoutes {
+  /** The Identity provider this route pair serves; also the URL segment. */
+  provider: IdentityProvider;
+  /** Human-readable name for error messages. */
+  displayName: string;
+  /** Absent when the provider is not configured; routes then answer 503. */
+  oauth?: OAuthProvider;
+  scopes: string[];
 }
 
 export default async function authRoutes(
   app: FastifyInstance,
   options: AuthRoutesOptions
 ) {
-  const { db, jwtSecret, googleOAuth, clientOrigin } = options;
+  const { db, jwtSecret, clientOrigin, googleOAuth, discordOAuth } = options;
 
   const oauthStateCookieAttributes = {
     httpOnly: true,
@@ -137,131 +151,139 @@ export default async function authRoutes(
     return reply.status(200).send(UserSchema.parse(updated));
   };
 
-  // Auth: Google OAuth start
-  // GET /api/v1/auth/oauth/google
-  const oauthGoogleHandler = async (
-    request: FastifyRequest,
-    reply: FastifyReply
-  ) => {
-    if (!googleOAuth) {
-      return app.sendProblem(
-        reply,
-        503,
-        "Service Unavailable",
-        "Google OAuth is not configured",
-        request.url
+  // Auth: OAuth start + callback, registered once per provider.
+  function registerOAuthProvider(routes: OAuthProviderRoutes) {
+    const { provider, displayName, oauth, scopes } = routes;
+
+    const startHandler = async (
+      request: FastifyRequest,
+      reply: FastifyReply
+    ) => {
+      if (!oauth) {
+        return app.sendProblem(
+          reply,
+          503,
+          "Service Unavailable",
+          `${displayName} OAuth is not configured`,
+          request.url
+        );
+      }
+
+      const queryParsed = OAuthStartQuerySchema.safeParse(request.query);
+      if (!queryParsed.success) {
+        return app.sendProblem(
+          reply,
+          400,
+          "Bad Request",
+          "Invalid OAuth query parameters",
+          request.url,
+          queryParsed.error.issues
+        );
+      }
+      const { guestUserId } = queryParsed.data;
+
+      const state = generateState();
+      const codeVerifier = generateCodeVerifier();
+      const authorizationUrl = oauth.createAuthorizationURL(
+        state,
+        codeVerifier,
+        scopes
       );
-    }
-
-    const queryParsed = OAuthStartQuerySchema.safeParse(request.query);
-    if (!queryParsed.success) {
-      return app.sendProblem(
-        reply,
-        400,
-        "Bad Request",
-        "Invalid OAuth query parameters",
-        request.url,
-        queryParsed.error.issues
+      const stateToken = await signOAuthState(
+        { state, codeVerifier, provider, guestUserId },
+        jwtSecret
       );
-    }
-    const { guestUserId } = queryParsed.data;
 
-    const state = generateState();
-    const codeVerifier = generateCodeVerifier();
-    const authorizationUrl = googleOAuth.createAuthorizationURL(
-      state,
-      codeVerifier,
-      GOOGLE_OAUTH_SCOPES
-    );
-    const stateToken = await signOAuthState(
-      { state, codeVerifier, guestUserId },
-      jwtSecret
-    );
-
-    reply.setCookie(OAUTH_STATE_COOKIE, stateToken, oauthStateCookieAttributes);
-    return reply.redirect(authorizationUrl.toString());
-  };
-
-  // Auth: Google OAuth callback
-  // GET /api/v1/auth/oauth/google/callback
-  const oauthGoogleCallbackHandler = async (
-    request: FastifyRequest,
-    reply: FastifyReply
-  ) => {
-    const clearStateCookie = () =>
-      reply.clearCookie(OAUTH_STATE_COOKIE, { path: "/" });
-
-    if (!googleOAuth) {
-      return sendOAuthErrorPage(
-        reply,
-        "Google OAuth is not configured",
-        clientOrigin,
-        503
+      reply.setCookie(
+        OAUTH_STATE_COOKIE,
+        stateToken,
+        oauthStateCookieAttributes
       );
-    }
+      return reply.redirect(authorizationUrl.toString());
+    };
 
-    const queryParsed = OAuthCallbackQuerySchema.safeParse(request.query);
-    if (!queryParsed.success) {
-      return sendOAuthErrorPage(
-        reply,
-        "Invalid OAuth callback parameters",
-        clientOrigin
-      );
-    }
-    const { code, state } = queryParsed.data;
+    const callbackHandler = async (
+      request: FastifyRequest,
+      reply: FastifyReply
+    ) => {
+      const clearStateCookie = () =>
+        reply.clearCookie(OAUTH_STATE_COOKIE, { path: "/" });
 
-    const stateToken = request.cookies[OAUTH_STATE_COOKIE];
-    const oauthState = stateToken
-      ? await verifyOAuthState(stateToken, jwtSecret)
-      : null;
+      if (!oauth) {
+        return sendOAuthErrorPage(
+          reply,
+          `${displayName} OAuth is not configured`,
+          clientOrigin,
+          503
+        );
+      }
 
-    if (!oauthState || oauthState.state !== state) {
+      const queryParsed = OAuthCallbackQuerySchema.safeParse(request.query);
+      if (!queryParsed.success) {
+        return sendOAuthErrorPage(
+          reply,
+          "Invalid OAuth callback parameters",
+          clientOrigin
+        );
+      }
+      const { code, state } = queryParsed.data;
+
+      const stateToken = request.cookies[OAUTH_STATE_COOKIE];
+      const oauthState = stateToken
+        ? await verifyOAuthState(stateToken, jwtSecret)
+        : null;
+
+      if (!oauthState || oauthState.state !== state || oauthState.provider !== provider) {
+        clearStateCookie();
+        return sendOAuthErrorPage(
+          reply,
+          "Invalid or expired OAuth state",
+          clientOrigin
+        );
+      }
+
+      let profile;
+      try {
+        profile = await oauth.validateAuthorizationCode(
+          code,
+          oauthState.codeVerifier
+        );
+      } catch {
+        clearStateCookie();
+        return sendOAuthErrorPage(
+          reply,
+          "Failed to exchange the authorization code",
+          clientOrigin
+        );
+      }
+
+      let user: User;
+      let accessToken: string;
+      try {
+        user = await resolveOAuthUser(db, provider, profile, oauthState.guestUserId);
+        accessToken = await signAccessToken(
+          { userId: user.id, role: user.role },
+          { secret: jwtSecret, expiresIn: "15m" }
+        );
+      } catch {
+        clearStateCookie();
+        return sendOAuthErrorPage(
+          reply,
+          "Failed to resolve the user account",
+          clientOrigin
+        );
+      }
+
       clearStateCookie();
-      return sendOAuthErrorPage(
-        reply,
-        "Invalid or expired OAuth state",
-        clientOrigin
-      );
-    }
+      const payload = OAuthCallbackResponseSchema.parse({ accessToken, user });
+      return reply
+        .type("text/html")
+        .send(renderOAuthSuccessPage(payload, clientOrigin));
+    };
 
-    let profile: GoogleUserInfo;
-    try {
-      profile = await googleOAuth.validateAuthorizationCode(
-        code,
-        oauthState.codeVerifier
-      );
-    } catch {
-      clearStateCookie();
-      return sendOAuthErrorPage(
-        reply,
-        "Failed to exchange the authorization code",
-        clientOrigin
-      );
-    }
-
-    let user: User;
-    let accessToken: string;
-    try {
-      user = await resolveGoogleUser(db, profile, oauthState.guestUserId);
-      accessToken = await signAccessToken(
-        { userId: user.id, role: user.role },
-        { secret: jwtSecret, expiresIn: "15m" }
-      );
-    } catch {
-      clearStateCookie();
-      return sendOAuthErrorPage(
-        reply,
-        "Failed to resolve the user account",
-        clientOrigin
-      );
-    }
-
-    clearStateCookie();
-    const payload = OAuthCallbackResponseSchema.parse({ accessToken, user });
-    return reply
-      .type("text/html")
-      .send(renderOAuthSuccessPage(payload, clientOrigin));
-  };
+    app.get(`/api/v1/auth/oauth/${provider}`, startHandler);
+    app.get(`/api/v1/auth/oauth/${provider}/callback`, callbackHandler);
+  }
 
   app.post("/api/v1/auth/anonymous", anonymousHandler);
   app.get("/api/v1/auth/me", { preHandler: app.authenticate }, meHandler);
@@ -270,6 +292,17 @@ export default async function authRoutes(
     { preHandler: app.authenticate },
     updateMeHandler
   );
-  app.get("/api/v1/auth/oauth/google", oauthGoogleHandler);
-  app.get("/api/v1/auth/oauth/google/callback", oauthGoogleCallbackHandler);
+
+  registerOAuthProvider({
+    provider: "google",
+    displayName: "Google",
+    oauth: googleOAuth,
+    scopes: GOOGLE_OAUTH_SCOPES,
+  });
+  registerOAuthProvider({
+    provider: "discord",
+    displayName: "Discord",
+    oauth: discordOAuth,
+    scopes: DISCORD_OAUTH_SCOPES,
+  });
 }

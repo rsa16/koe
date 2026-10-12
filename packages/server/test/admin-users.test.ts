@@ -350,9 +350,10 @@ describe("Admin Users & Settings API", () => {
       expect(AdminSettingsSchema.safeParse(body).success).toBe(true);
       expect(body.reactionAllowlist.length).toBeGreaterThan(0);
       expect(body.googleOAuthEnabled).toBe(false);
+      expect(body.discordOAuthEnabled).toBe(false);
     });
 
-    it("reflects a configured reaction allowlist and Google OAuth", async () => {
+    it("reflects a configured reaction allowlist and OAuth providers", async () => {
       const { db } = await createMemDb();
       const configured = buildApp({
         db,
@@ -360,6 +361,7 @@ describe("Admin Users & Settings API", () => {
         logger: false,
         reactionAllowlist: ["🔥"],
         googleOAuth: {} as never,
+        discordOAuth: {} as never,
       });
       await configured.ready();
       try {
@@ -393,6 +395,7 @@ describe("Admin Users & Settings API", () => {
         expect(response.statusCode).toBe(200);
         expect(response.json().reactionAllowlist).toEqual(["🔥"]);
         expect(response.json().googleOAuthEnabled).toBe(true);
+        expect(response.json().discordOAuthEnabled).toBe(true);
       } finally {
         await configured.close();
       }

@@ -7,7 +7,7 @@ export type UserRole = z.infer<typeof UserRoleSchema>;
 export const UserStatusSchema = z.enum(["active", "suspended", "banned"]);
 export type UserStatus = z.infer<typeof UserStatusSchema>;
 
-export const IdentityProviderSchema = z.enum(["anonymous", "google", "github", "x"]);
+export const IdentityProviderSchema = z.enum(["anonymous", "google", "discord", "github", "x"]);
 export type IdentityProvider = z.infer<typeof IdentityProviderSchema>;
 
 export const ThreadStatusSchema = z.enum(["open", "closed", "locked"]);
@@ -413,6 +413,7 @@ export const AdminSettingsSchema = z.object({
   reactionAllowlist: z.array(z.string()),
   preModerationDefault: z.boolean(),
   googleOAuthEnabled: z.boolean(),
+  discordOAuthEnabled: z.boolean(),
 });
 export type AdminSettings = z.infer<typeof AdminSettingsSchema>;
 

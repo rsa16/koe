@@ -1,6 +1,6 @@
 import { buildApp } from "./app.js";
 import { createDbClient } from "@koe/db";
-import { createGoogleOAuthProvider } from "./oauth.js";
+import { createDiscordOAuthProvider, createGoogleOAuthProvider } from "./oauth.js";
 import {
   DEFAULT_DUPLICATE_COMMENT_WINDOW_MS,
   DEFAULT_RATE_LIMIT_WINDOW_MS,
@@ -38,6 +38,14 @@ const googleOAuth =
     ? createGoogleOAuthProvider(googleClientId, googleClientSecret, googleRedirectURI)
     : undefined;
 
+const discordClientId = process.env.DISCORD_CLIENT_ID;
+const discordClientSecret = process.env.DISCORD_CLIENT_SECRET;
+const discordRedirectURI = process.env.DISCORD_REDIRECT_URI;
+const discordOAuth =
+  discordClientId && discordClientSecret && discordRedirectURI
+    ? createDiscordOAuthProvider(discordClientId, discordClientSecret, discordRedirectURI)
+    : undefined;
+
 const db = createDbClient(databaseUrl);
 
 function envInt(name: string, fallback: number): number {
@@ -69,6 +77,7 @@ const app = buildApp({
   jwtSecret,
   sessionSecret: process.env.SESSION_SECRET,
   googleOAuth,
+  discordOAuth,
   clientOrigin: process.env.CLIENT_ORIGIN,
   reactionAllowlist,
   rateLimits,

@@ -7,7 +7,7 @@ import { Database } from "@koe/db";
 import Fastify, { FastifyInstance } from "fastify";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { GoogleOAuthProvider } from "./oauth.js";
+import { DiscordOAuthProvider, GoogleOAuthProvider } from "./oauth.js";
 
 import problemDetailsPlugin from "./plugins/problem-details.js";
 import authenticatePlugin from "./plugins/authenticate.js";
@@ -32,6 +32,7 @@ export interface BuildAppOptions {
   jwtSecret: string;
   logger?: boolean;
   googleOAuth?: GoogleOAuthProvider;
+  discordOAuth?: DiscordOAuthProvider;
   clientOrigin?: string;
   reactionAllowlist?: string[];
   preModerationDefault?: boolean;
@@ -81,6 +82,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   const jwtSecret = options.jwtSecret;
   const sessionSecret = options.sessionSecret ?? jwtSecret;
   const googleOAuth = options.googleOAuth;
+  const discordOAuth = options.discordOAuth;
   const clientOrigin = options.clientOrigin ?? "*";
   const reactionAllowlist = EmojiAllowlistSchema.parse(
     options.reactionAllowlist ?? DEFAULT_EMOJI_ALLOWLIST
@@ -106,6 +108,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     jwtSecret,
     clientOrigin,
     googleOAuth,
+    discordOAuth,
   });
   app.register(threadsRoutes, {
     db: options.db,
@@ -133,6 +136,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     reactionAllowlist,
     preModerationDefault,
     googleOAuthEnabled: Boolean(googleOAuth),
+    discordOAuthEnabled: Boolean(discordOAuth),
   });
 
   registerAdminSpa(app, options.adminDistPath);

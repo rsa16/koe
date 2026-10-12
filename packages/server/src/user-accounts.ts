@@ -1,7 +1,7 @@
-import { User, UserSchema } from "@koe/core";
+import { IdentityProvider, User, UserSchema } from "@koe/core";
 import { comments, Database, identities, users } from "@koe/db";
 import { and, eq } from "drizzle-orm";
-import { GoogleUserInfo } from "./oauth.js";
+import { OAuthProfile } from "./oauth.js";
 
 async function findUserById(db: Database, id: string) {
   const rows = await db.select().from(users).where(eq(users.id, id)).limit(1);
@@ -30,9 +30,15 @@ export async function mergeGuestIntoUser(
   });
 }
 
-export async function resolveGoogleUser(
+/**
+ * Resolves an OAuth profile to a User, creating or reusing the Identity for
+ * `provider`. When a guest session is present, its Identity is claimed (or the
+ * guest is merged into the existing account) so comments survive the login.
+ */
+export async function resolveOAuthUser(
   db: Database,
-  profile: GoogleUserInfo,
+  provider: IdentityProvider,
+  profile: OAuthProfile,
   guestUserId?: string
 ): Promise<User> {
   const guest = guestUserId ? await findAnonymousGuest(db, guestUserId) : undefined;
@@ -40,7 +46,12 @@ export async function resolveGoogleUser(
   const existingIdentity = await db
     .select()
     .from(identities)
-    .where(and(eq(identities.provider, "google"), eq(identities.providerUserId, profile.sub)))
+    .where(
+      and(
+        eq(identities.provider, provider),
+        eq(identities.providerUserId, profile.sub)
+      )
+    )
     .limit(1);
 
   if (existingIdentity.length > 0) {
@@ -54,16 +65,18 @@ export async function resolveGoogleUser(
     return UserSchema.parse(existingUser);
   }
 
+  const profileData = {
+    name: profile.name,
+    email: profile.email,
+    picture: profile.picture,
+  };
+
   if (guest) {
     await db.insert(identities).values({
       userId: guest.id,
-      provider: "google",
+      provider,
       providerUserId: profile.sub,
-      profileData: {
-        name: profile.name,
-        email: profile.email,
-        picture: profile.picture,
-      },
+      profileData,
     });
     const [updated] = await db
       .update(users)
@@ -93,13 +106,9 @@ export async function resolveGoogleUser(
 
   await db.insert(identities).values({
     userId: newUser.id,
-    provider: "google",
+    provider,
     providerUserId: profile.sub,
-    profileData: {
-      name: profile.name,
-      email: profile.email,
-      picture: profile.picture,
-    },
+    profileData,
   });
 
   return UserSchema.parse(newUser);

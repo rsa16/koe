@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 
 export const userRoleEnum = pgEnum("user_role", ["guest", "member", "moderator", "admin"]);
 export const userStatusEnum = pgEnum("user_status", ["active", "suspended", "banned"]);
-export const identityProviderEnum = pgEnum("identity_provider", ["anonymous", "google", "github", "x"]);
+export const identityProviderEnum = pgEnum("identity_provider", ["anonymous", "google", "discord", "github", "x"]);
 export const threadStatusEnum = pgEnum("thread_status", ["open", "closed", "locked"]);
 export const commentStatusEnum = pgEnum("comment_status", ["pending", "published", "spam", "deleted"]);
 export const reactionTargetTypeEnum = pgEnum("reaction_target_type", ["comment", "thread"]);

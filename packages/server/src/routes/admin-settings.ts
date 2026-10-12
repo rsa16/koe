@@ -5,13 +5,14 @@ export interface AdminSettingsRoutesOptions {
   reactionAllowlist: string[];
   preModerationDefault: boolean;
   googleOAuthEnabled: boolean;
+  discordOAuthEnabled: boolean;
 }
 
 export default async function adminSettingsRoutes(
   app: FastifyInstance,
   options: AdminSettingsRoutesOptions
 ) {
-  const { reactionAllowlist, preModerationDefault, googleOAuthEnabled } =
+  const { reactionAllowlist, preModerationDefault, googleOAuthEnabled, discordOAuthEnabled } =
     options;
 
   // Admin: read-only effective configuration
@@ -26,6 +27,7 @@ export default async function adminSettingsRoutes(
         reactionAllowlist,
         preModerationDefault,
         googleOAuthEnabled,
+        discordOAuthEnabled,
       })
     );
   };

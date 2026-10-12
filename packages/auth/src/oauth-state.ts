@@ -3,6 +3,7 @@ import { signJwt, verifyJwt } from "./jwt.js";
 export type OAuthStatePayload = {
   state: string;
   codeVerifier: string;
+  provider?: string;
   guestUserId?: string;
 };
 
@@ -27,12 +28,16 @@ export async function verifyOAuthState(
   if (typeof data.state !== "string" || typeof data.codeVerifier !== "string") {
     return null;
   }
+  if (data.provider !== undefined && typeof data.provider !== "string") {
+    return null;
+  }
   if (data.guestUserId !== undefined && typeof data.guestUserId !== "string") {
     return null;
   }
   return {
     state: data.state,
     codeVerifier: data.codeVerifier,
+    ...(data.provider !== undefined ? { provider: data.provider } : {}),
     ...(data.guestUserId !== undefined ? { guestUserId: data.guestUserId } : {}),
   };
 }

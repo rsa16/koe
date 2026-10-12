@@ -9,7 +9,7 @@ export async function createMemDb() {
   await client.exec(`
     CREATE TYPE user_role AS ENUM ('guest', 'member', 'moderator', 'admin');
     CREATE TYPE user_status AS ENUM ('active', 'suspended', 'banned');
-    CREATE TYPE identity_provider AS ENUM ('anonymous', 'google', 'github', 'x');
+    CREATE TYPE identity_provider AS ENUM ('anonymous', 'google', 'discord', 'github', 'x');
     CREATE TYPE thread_status AS ENUM ('open', 'closed', 'locked');
     CREATE TYPE comment_status AS ENUM ('pending', 'published', 'spam', 'deleted');
     CREATE TYPE reaction_target_type AS ENUM ('comment', 'thread');

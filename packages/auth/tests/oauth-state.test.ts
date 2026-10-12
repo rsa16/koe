@@ -29,6 +29,16 @@ describe("OAuth State", () => {
     expect(verified?.guestUserId).toBe(guestUserId);
   });
 
+  it("round-trips an optional provider", async () => {
+    const value = await signOAuthState(
+      { state: "abc123", codeVerifier: "verifier-value", provider: "discord" },
+      secret
+    );
+
+    const verified = await verifyOAuthState(value, secret);
+    expect(verified?.provider).toBe("discord");
+  });
+
   it("rejects a tampered payload", async () => {
     const value = await signOAuthState(
       { state: "abc123", codeVerifier: "verifier-value" },
