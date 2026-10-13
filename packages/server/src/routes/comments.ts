@@ -6,12 +6,14 @@ import {
   CreateCommentParamsSchema,
   EventBus,
   ThreadSchema,
+  UserRole,
 } from "@koe/core";
 import { comments, Database, reactions, threads, users, votes } from "@koe/db";
 import { renderMarkdown } from "@koe/renderer";
 import { and, eq, gt, inArray, notInArray, or, sql } from "drizzle-orm";
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { computeReplyPosition } from "../replies.js";
+import { parseCommentIdParam } from "../comment-scoped.js";
 import {
   DEFAULT_DUPLICATE_COMMENT_WINDOW_MS,
   RateLimitConfig,
@@ -218,15 +220,27 @@ export default async function commentsRoutes(
       );
     }
 
+    // A soft-deleted comment is hidden unless it still anchors live replies, in
+    // which case it is surfaced as a tombstone so its children stay reachable.
+    const deletedWithReplies = sql`(
+      ${comments.status} = 'deleted'
+      AND EXISTS (
+        SELECT 1 FROM ${comments} AS child
+        WHERE child.parent_id = ${comments.id}
+          AND child.status <> 'deleted'
+      )
+    )`;
+
     const statusFilter = request.user
       ? or(
           eq(comments.status, "published"),
           and(
             eq(comments.status, "pending"),
             eq(comments.authorId, request.user.id)
-          )
+          ),
+          deletedWithReplies
         )
-      : eq(comments.status, "published");
+      : or(eq(comments.status, "published"), deletedWithReplies);
 
     const bannedAuthorIds = db
       .select({ id: users.id })
@@ -249,11 +263,16 @@ export default async function commentsRoutes(
           comment: comments,
           authorName: users.name,
           authorAvatarUrl: users.avatarUrl,
+          authorRole: users.role,
         })
         .from(comments)
         .leftJoin(users, eq(users.id, comments.authorId))
         .where(whereRoots)
-        .orderBy(comments.createdAt, comments.id)
+        .orderBy(
+          sql`${comments.pinnedAt} DESC NULLS LAST`,
+          comments.createdAt,
+          comments.id
+        )
         .limit(pageSize)
         .offset((page - 1) * pageSize)
     ).map(attachAuthor);
@@ -265,6 +284,7 @@ export default async function commentsRoutes(
           comment: comments,
           authorName: users.name,
           authorAvatarUrl: users.avatarUrl,
+          authorRole: users.role,
         })
         .from(comments)
         .leftJoin(users, eq(users.id, comments.authorId))
@@ -275,7 +295,11 @@ export default async function commentsRoutes(
             visibleFilter
           )
         )
-        .orderBy(comments.createdAt, comments.id)
+        .orderBy(
+          sql`${comments.pinnedAt} DESC NULLS LAST`,
+          comments.createdAt,
+          comments.id
+        )
     ).map(attachAuthor);
 
     let userVotes: Map<string, 1 | -1> | undefined;
@@ -333,6 +357,90 @@ export default async function commentsRoutes(
       );
   };
 
+  // Comments: pin / unpin (moderators and admins curate the thread)
+  // POST /api/v1/comments/:id/pin
+  // DELETE /api/v1/comments/:id/pin
+  const setPinnedHandler = (pinned: boolean) => {
+    return async (request: FastifyRequest, reply: FastifyReply) => {
+      const commentId = parseCommentIdParam(app, request, reply);
+      if (!commentId) {
+        return;
+      }
+
+      const found = await db
+        .select()
+        .from(comments)
+        .where(eq(comments.id, commentId))
+        .limit(1);
+
+      if (found.length === 0) {
+        return app.sendProblem(
+          reply,
+          404,
+          "Not Found",
+          "Comment does not exist",
+          request.url
+        );
+      }
+
+      const [row] = await db
+        .update(comments)
+        .set({ pinnedAt: pinned ? new Date() : null, updatedAt: new Date() })
+        .where(eq(comments.id, commentId))
+        .returning();
+
+      return reply.status(200).send(CommentSchema.parse(row));
+    };
+  };
+
+  // Comments: delete own comment (soft delete, keeps replies as tombstones)
+  // DELETE /api/v1/comments/:id
+  const deleteOwnCommentHandler = async (
+    request: FastifyRequest,
+    reply: FastifyReply
+  ) => {
+    const commentId = parseCommentIdParam(app, request, reply);
+    if (!commentId) {
+      return;
+    }
+
+    const found = await db
+      .select()
+      .from(comments)
+      .where(eq(comments.id, commentId))
+      .limit(1);
+
+    if (found.length === 0) {
+      return app.sendProblem(
+        reply,
+        404,
+        "Not Found",
+        "Comment does not exist",
+        request.url
+      );
+    }
+
+    if (found[0].authorId !== request.user!.id) {
+      return app.sendProblem(
+        reply,
+        403,
+        "Forbidden",
+        "You can only delete your own comment",
+        request.url
+      );
+    }
+
+    const [row] = await db
+      .update(comments)
+      .set({ status: "deleted", updatedAt: new Date() })
+      .where(eq(comments.id, commentId))
+      .returning();
+
+    const comment = CommentSchema.parse(row);
+    events.emit("comment.deleted", { comment });
+    return reply.status(200).send(comment);
+  };
+
   app.post(
     "/api/v1/threads/:id/comments",
     {
@@ -348,12 +456,28 @@ export default async function commentsRoutes(
     { preHandler: app.authenticateOptional },
     listCommentsHandler
   );
+  app.post(
+    "/api/v1/comments/:id/pin",
+    { preHandler: [app.requireRole(["moderator", "admin"]), app.requireActiveUser] },
+    setPinnedHandler(true)
+  );
+  app.delete(
+    "/api/v1/comments/:id/pin",
+    { preHandler: [app.requireRole(["moderator", "admin"]), app.requireActiveUser] },
+    setPinnedHandler(false)
+  );
+  app.delete(
+    "/api/v1/comments/:id",
+    { preHandler: [app.authenticate, app.requireActiveUser] },
+    deleteOwnCommentHandler
+  );
 }
 
 type CommentRow = typeof comments.$inferSelect;
 interface CommentRowWithAuthor extends CommentRow {
   authorName: string | null;
   authorAvatarUrl: string | null;
+  authorRole: UserRole | null;
 }
 interface CommentTreeNode extends CommentRowWithAuthor {
   children: CommentTreeNode[];
@@ -365,11 +489,17 @@ function attachAuthor(row: {
   comment: CommentRow;
   authorName: string | null;
   authorAvatarUrl: string | null;
+  authorRole: UserRole | null;
 }): CommentRowWithAuthor {
+  const deleted = row.comment.status === "deleted";
   return {
     ...row.comment,
+    // Never leak the body of a soft-deleted comment; surface a tombstone.
+    bodyMd: deleted ? "" : row.comment.bodyMd,
+    bodyHtml: deleted ? "" : row.comment.bodyHtml,
     authorName: row.authorName,
     authorAvatarUrl: row.authorAvatarUrl,
+    authorRole: row.authorRole,
   };
 }
 

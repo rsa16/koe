@@ -68,6 +68,7 @@ export async function createMemDb() {
       downvotes INTEGER NOT NULL DEFAULT 0,
       reaction_totals JSONB NOT NULL DEFAULT '{}'::jsonb,
       metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+      pinned_at TIMESTAMPTZ,
       edited_at TIMESTAMPTZ,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

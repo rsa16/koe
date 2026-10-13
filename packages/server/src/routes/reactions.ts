@@ -6,7 +6,7 @@ import {
   ReactionSchema,
 } from "@koe/core";
 import { comments, Database, reactions, threads } from "@koe/db";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import {
   commentExists,
@@ -71,6 +71,30 @@ export default async function reactionsRoutes(
       .where(eq(table.id, targetId));
   }
 
+  // Thread (article) reactions are single-choice: a user holds at most one.
+  // Clearing every reaction the user holds (not just the target emoji) also
+  // repairs any legacy rows that predate the rule.
+  async function clearThreadReactions(
+    tx: Database,
+    targetId: string,
+    userId: string
+  ) {
+    const previous = await tx
+      .select()
+      .from(reactions)
+      .where(
+        and(
+          eq(reactions.targetType, "thread"),
+          eq(reactions.targetId, targetId),
+          eq(reactions.userId, userId)
+        )
+      );
+    for (const other of previous) {
+      await tx.delete(reactions).where(eq(reactions.id, other.id));
+      await applyReactionDelta(tx, "thread", targetId, other.emoji, -1);
+    }
+  }
+
   async function toggleReaction(
     tx: Database,
     targetType: TargetType,
@@ -87,12 +111,21 @@ export default async function reactionsRoutes(
     );
 
     if (existing === null) {
+      if (targetType === "thread") {
+        await clearThreadReactions(tx, targetId, userId);
+      }
+
       const [reaction] = await tx
         .insert(reactions)
         .values({ targetType, targetId, userId, emoji })
         .returning();
       await applyReactionDelta(tx, targetType, targetId, emoji, 1);
       return { status: 201, reaction };
+    }
+
+    if (targetType === "thread") {
+      await clearThreadReactions(tx, targetId, userId);
+      return { status: 204, reaction: null };
     }
 
     await tx.delete(reactions).where(eq(reactions.id, existing.id));

@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createKoeClient } from "@koe/sdk";
-import { createMemDb } from "@koe/db";
+import { createMemDb, Database, users } from "@koe/db";
 import { buildApp } from "@koe/server/app";
 import { FastifyInstance } from "fastify";
+import { eq } from "drizzle-orm";
+import { UserRole } from "@koe/core";
 import "../src/index.js";
 import { AUTH_EXPIRED_EVENT, KoeComments } from "../src/index.js";
 
@@ -68,9 +70,11 @@ fixCrossRealmUint8Array();
 describe("<koe-comments> widget", () => {
   let app: FastifyInstance;
   let baseUrl: string;
+  let memDb: Database;
 
   beforeAll(async () => {
     const { db } = await createMemDb();
+    memDb = db;
     app = buildApp({
       db,
       jwtSecret: "test-jwt-secret-at-least-32-chars-long",
@@ -127,6 +131,14 @@ describe("<koe-comments> widget", () => {
     const client = createKoeClient({ baseUrl });
     const { accessToken } = await client.auth.anonymous();
     await client.comments.react(commentId, emoji, accessToken);
+  }
+
+  async function roleToken(role: UserRole): Promise<string> {
+    const client = createKoeClient({ baseUrl });
+    const { accessToken } = await client.auth.anonymous();
+    const user = await client.auth.me(accessToken);
+    await memDb.update(users).set({ role }).where(eq(users.id, user.id));
+    return accessToken;
   }
 
   function selectMediaFile(element: KoeComments, file: File) {
@@ -726,6 +738,95 @@ describe("<koe-comments> widget", () => {
     ) as HTMLButtonElement;
     expect(reportedButton.textContent?.trim()).toBe("Reported");
     expect(reportedButton.disabled).toBe(true);
+  });
+
+  it("shows an Admin chip next to an admin author's name", async () => {
+    const token = await roleToken("admin");
+    localStorage.clear();
+    const element = mount("widget-role-chip", `token="${token}"`);
+    await waitFor(() => element.shadowRoot?.querySelector(".empty") !== null);
+
+    await postComment(element, "Admin says hi");
+    await waitFor(() => element.shadowRoot?.querySelector(".role-badge") !== null);
+
+    const badge = element.shadowRoot!.querySelector(".role-badge")!;
+    expect(badge.textContent?.trim()).toBe("Admin");
+  });
+
+  it("shows a Moderator chip next to a moderator author's name", async () => {
+    const token = await roleToken("moderator");
+    localStorage.clear();
+    const element = mount("widget-role-chip-mod", `token="${token}"`);
+    await waitFor(() => element.shadowRoot?.querySelector(".empty") !== null);
+
+    await postComment(element, "Moderator says hi");
+    await waitFor(() => element.shadowRoot?.querySelector(".role-badge") !== null);
+
+    const badge = element.shadowRoot!.querySelector(".role-badge")!;
+    expect(badge.textContent?.trim()).toBe("Moderator");
+  });
+
+  it("lets a moderator pin and unpin a comment", async () => {
+    const token = await roleToken("moderator");
+    localStorage.clear();
+    const element = mount("widget-pin", `token="${token}"`);
+    await waitFor(() => element.shadowRoot?.querySelector(".empty") !== null);
+
+    await postComment(element, "Pin me please");
+    await waitFor(
+      () => element.shadowRoot!.querySelectorAll(".comment").length === 1
+    );
+
+    const pinButton = element.shadowRoot!.querySelector(
+      ".pin-button"
+    ) as HTMLButtonElement;
+    expect(pinButton).not.toBeNull();
+    expect(pinButton.textContent?.trim()).toBe("Pin");
+
+    pinButton.click();
+    await waitFor(
+      () => element.shadowRoot?.querySelector(".pinned-badge") !== null
+    );
+    expect(
+      element.shadowRoot!.querySelector(".pinned-badge")?.textContent
+    ).toContain("Pinned");
+    expect(
+      (element.shadowRoot!.querySelector(".pin-button") as HTMLButtonElement)
+        .textContent?.trim()
+    ).toBe("Unpin");
+  });
+
+  it("does not show pin controls to a guest", async () => {
+    const element = mount("widget-pin-guest");
+    await waitFor(() => element.shadowRoot?.querySelector(".empty") !== null);
+
+    await postComment(element, "Just a guest");
+    await waitFor(
+      () => element.shadowRoot!.querySelectorAll(".comment").length === 1
+    );
+
+    expect(element.shadowRoot!.querySelector(".pin-button")).toBeNull();
+  });
+
+  it("lets an author delete their own comment", async () => {
+    const element = mount("widget-delete");
+    await waitFor(() => element.shadowRoot?.querySelector(".empty") !== null);
+
+    await postComment(element, "Delete me");
+    await waitFor(
+      () => element.shadowRoot!.querySelectorAll(".comment").length === 1
+    );
+
+    const deleteButton = element.shadowRoot!.querySelector(
+      ".delete-button"
+    ) as HTMLButtonElement;
+    expect(deleteButton).not.toBeNull();
+    deleteButton.click();
+
+    await waitFor(
+      () => element.shadowRoot!.querySelectorAll(".comment").length === 0
+    );
+    expect(element.shadowRoot!.querySelector(".empty")).not.toBeNull();
   });
 
   it("routes requests through a non-default api-base prefix", async () => {

@@ -1,4 +1,4 @@
-import { KoeApiError, KoeClient } from "@koe/sdk";
+import { KoeApiError, KoeClient, User } from "@koe/sdk";
 
 export const ACCESS_TOKEN_KEY = "koe_access_token";
 
@@ -14,22 +14,27 @@ export interface TokenStorage {
   removeItem(key: string): void;
 }
 
+export interface GuestSession {
+  accessToken: string;
+  user: User;
+}
+
 export async function ensureGuestSession(
   client: KoeClient,
   storage: TokenStorage
-): Promise<string> {
+): Promise<GuestSession> {
   const stored = storage.getItem(ACCESS_TOKEN_KEY);
   if (stored) {
     try {
-      await client.auth.me(stored);
-      return stored;
+      const user = await client.auth.me(stored);
+      return { accessToken: stored, user };
     } catch {
       storage.removeItem(ACCESS_TOKEN_KEY);
     }
   }
   const response = await client.auth.anonymous();
   storage.setItem(ACCESS_TOKEN_KEY, response.accessToken);
-  return response.accessToken;
+  return { accessToken: response.accessToken, user: response.user };
 }
 
 export function emitAuthExpired(
@@ -64,6 +69,7 @@ async function runWithAuthRetry<T>(
 
 export interface AuthSession {
   readonly accessToken: string;
+  readonly user: User | null;
   resolve(): Promise<void>;
   runWithRetry<T>(operation: () => Promise<T>): Promise<T>;
 }
@@ -83,13 +89,14 @@ export interface AuthSessionOptions {
  */
 export function createAuthSession(options: AuthSessionOptions): AuthSession {
   let accessToken = "";
+  let currentUser: User | null = null;
 
   async function resolve(): Promise<void> {
     const hostToken = options.hostToken();
     if (hostToken) {
       accessToken = hostToken;
       try {
-        await options.client.auth.me(hostToken);
+        currentUser = await options.client.auth.me(hostToken);
       } catch (err) {
         if (err instanceof KoeApiError && err.status === 401) {
           options.onExpired();
@@ -98,7 +105,9 @@ export function createAuthSession(options: AuthSessionOptions): AuthSession {
       }
       return;
     }
-    accessToken = await ensureGuestSession(options.client, options.storage);
+    const guest = await ensureGuestSession(options.client, options.storage);
+    accessToken = guest.accessToken;
+    currentUser = guest.user;
   }
 
   async function runWithRetry<T>(operation: () => Promise<T>): Promise<T> {
@@ -109,6 +118,7 @@ export function createAuthSession(options: AuthSessionOptions): AuthSession {
       }
       options.storage.removeItem(ACCESS_TOKEN_KEY);
       accessToken = "";
+      currentUser = null;
       await resolve();
       return true;
     });
@@ -117,6 +127,9 @@ export function createAuthSession(options: AuthSessionOptions): AuthSession {
   return {
     get accessToken() {
       return accessToken;
+    },
+    get user() {
+      return currentUser;
     },
     resolve,
     runWithRetry,

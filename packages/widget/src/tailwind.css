@@ -214,6 +214,33 @@
     white-space: nowrap;
   }
 
+  .role-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0 calc(var(--koe-space) * 2);
+    border-radius: var(--koe-radius-full);
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: var(--koe-accent);
+    background-color: var(--koe-accent-soft);
+    white-space: nowrap;
+  }
+
+  .pinned-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: calc(var(--koe-space));
+    padding: 1px calc(var(--koe-space) * 2);
+    border-radius: var(--koe-radius-full);
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: var(--koe-accent);
+    background-color: var(--koe-accent-soft);
+    white-space: nowrap;
+  }
+
   .toolbar-button {
     display: inline-flex;
     align-items: center;

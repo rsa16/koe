@@ -187,6 +187,31 @@ describe("<koe-article-reactions> widget", () => {
     ).toBe("1");
   });
 
+  it("keeps one reaction per user, replacing the previous choice", async () => {
+    const element = mount("article-single");
+    await waitForButtons(element);
+
+    buttonFor(element, "👍").click();
+    await waitFor(
+      () => buttonFor(element, "👍").getAttribute("aria-pressed") === "true"
+    );
+
+    buttonFor(element, "❤️").click();
+    await waitFor(
+      () => buttonFor(element, "❤️").getAttribute("aria-pressed") === "true"
+    );
+    await waitFor(
+      () => buttonFor(element, "👍").getAttribute("aria-pressed") === "false"
+    );
+
+    expect(
+      buttonFor(element, "👍")
+        .querySelector(".reaction-count")
+        ?.textContent?.trim()
+    ).toBe("0");
+    await expect(threadTotals("article-single")).resolves.toEqual({ "❤️": 1 });
+  });
+
   it("reflects other users' reactions in the count without marking them active", async () => {
     const client = createKoeClient({ baseUrl });
     const { accessToken } = await client.auth.anonymous();

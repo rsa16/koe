@@ -5,6 +5,7 @@ import {
   DEFAULT_EMOJI_ALLOWLIST,
   KoeClient,
   MediaProvider,
+  User,
 } from "@koe/sdk";
 import { html, LitElement, nothing, PropertyValues, TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -115,6 +116,9 @@ const ICON_PATHS = {
   alert:
     "M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z",
   flag: "M3 3v1.5M3 21v-6m0 0 2.77-.693a9 9 0 0 1 6.208.682l.108.054a9 9 0 0 0 6.086.71l3.114-.732a48.524 48.524 0 0 1-.005-10.499l-3.11.732a9 9 0 0 1-6.085-.711l-.108-.054a9 9 0 0 0-6.208-.682L3 4.5M3 15V4.5",
+  pin: "M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 0c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z",
+  trash:
+    "m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0",
 };
 
 @customElement("koe-comments")
@@ -174,6 +178,9 @@ export class KoeComments extends LitElement {
   @state() private reportReason = "";
   @state() private reporting = false;
   @state() private reportedComments: Set<string> = new Set();
+  @state() private currentUser: User | null = null;
+  @state() private deletingComment: string | null = null;
+  @state() private pinningComment: string | null = null;
 
   private client: KoeClient | null = null;
   private auth: AuthSession | null = null;
@@ -249,6 +256,7 @@ export class KoeComments extends LitElement {
     this.error = "";
     try {
       await this.auth!.resolve();
+      this.currentUser = this.auth!.user;
       const thread = await this.client!.threads.getByRef(
         this.threadRef,
         undefined,
@@ -742,6 +750,60 @@ export class KoeComments extends LitElement {
         err instanceof Error ? err.message : "Failed to report comment";
     } finally {
       this.reporting = false;
+    }
+  }
+
+  private get canModerate(): boolean {
+    return (
+      this.currentUser?.role === "moderator" ||
+      this.currentUser?.role === "admin"
+    );
+  }
+
+  private canDelete(comment: CommentNode): boolean {
+    return (
+      comment.status !== "deleted" &&
+      this.currentUser !== null &&
+      this.currentUser.id === comment.authorId
+    );
+  }
+
+  private async handleDelete(commentId: string) {
+    if (this.deletingComment) {
+      return;
+    }
+    this.deletingComment = commentId;
+    this.error = "";
+    try {
+      await this.auth!.runWithRetry(() =>
+        this.client!.comments.delete(commentId, this.auth!.accessToken)
+      );
+      await this.reloadComments();
+    } catch (err) {
+      this.error =
+        err instanceof Error ? err.message : "Failed to delete comment";
+    } finally {
+      this.deletingComment = null;
+    }
+  }
+
+  private async togglePin(comment: CommentNode) {
+    if (this.pinningComment) {
+      return;
+    }
+    this.pinningComment = comment.id;
+    this.error = "";
+    try {
+      await this.auth!.runWithRetry(() =>
+        comment.pinnedAt
+          ? this.client!.comments.unpin(comment.id, this.auth!.accessToken)
+          : this.client!.comments.pin(comment.id, this.auth!.accessToken)
+      );
+      await this.reloadComments();
+    } catch (err) {
+      this.error = err instanceof Error ? err.message : "Failed to update pin";
+    } finally {
+      this.pinningComment = null;
     }
   }
 
@@ -1280,6 +1342,9 @@ export class KoeComments extends LitElement {
     const collapsed = this.collapsedThreads.has(comment.id);
     const reported = this.reportedComments.has(comment.id);
     const childCount = comment.children.length;
+    const isDeleted = comment.status === "deleted";
+    const isStaff =
+      comment.authorRole === "admin" || comment.authorRole === "moderator";
     return html`
       <li part="comment" class="comment">
         <div class="flex gap-3">
@@ -1294,6 +1359,14 @@ export class KoeComments extends LitElement {
               >
                 ${comment.authorName ?? "Guest"}
               </span>
+              ${isStaff
+                ? html`<span
+                    part="role-badge"
+                    class="role-badge ${comment.authorRole}"
+                  >
+                    ${comment.authorRole === "admin" ? "Admin" : "Moderator"}
+                  </span>`
+                : nothing}
               <span class="text-koe-border-strong" aria-hidden="true"
                 >·</span
               >
@@ -1305,17 +1378,32 @@ export class KoeComments extends LitElement {
               >
                 ${formatRelativeTime(createdAt)}
               </time>
+              ${comment.pinnedAt
+                ? html`<span part="pinned-badge" class="pinned-badge">
+                    ${this.icon(ICON_PATHS.pin, "h-3 w-3")}Pinned
+                  </span>`
+                : nothing}
               ${comment.status === "pending"
                 ? html`<span part="pending-badge" class="pending-badge"
                     >Pending approval</span
                   >`
                 : nothing}
             </div>
-            <div
-              part="body"
-              class="comment-body prose prose-sm max-w-none"
-            >${unsafeHTML(comment.bodyHtml)}</div>
+            ${isDeleted
+              ? html`<div
+                  part="body"
+                  class="comment-body comment-body--deleted text-sm italic text-koe-text-subtle"
+                >
+                  This comment was deleted.
+                </div>`
+              : html`<div
+                  part="body"
+                  class="comment-body prose prose-sm max-w-none"
+                >${unsafeHTML(comment.bodyHtml)}</div>`}
 
+            ${isDeleted
+              ? nothing
+              : html`
             <div
               part="actions"
               class="comment-actions mt-2.5 flex flex-wrap items-center gap-2"
@@ -1456,7 +1544,46 @@ export class KoeComments extends LitElement {
                 ${this.icon(ICON_PATHS.reply)}
                 Reply
               </button>
+              ${this.canModerate
+                ? html`
+                    <button
+                      type="button"
+                      part="pin-button"
+                      class="pin-button inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium text-koe-text-muted transition-colors hover:bg-koe-surface-sunken hover:text-koe-text disabled:cursor-not-allowed disabled:opacity-60 ${comment.pinnedAt
+                        ? "active"
+                        : ""}"
+                      aria-label=${comment.pinnedAt
+                        ? "Unpin comment"
+                        : "Pin comment"}
+                      title=${comment.pinnedAt ? "Unpin comment" : "Pin comment"}
+                      ?disabled=${this.pinningComment === comment.id}
+                      @click=${() => this.togglePin(comment)}
+                    >
+                      ${this.icon(ICON_PATHS.pin)}
+                      ${comment.pinnedAt ? "Unpin" : "Pin"}
+                    </button>
+                  `
+                : nothing}
+              ${this.canDelete(comment)
+                ? html`
+                    <button
+                      type="button"
+                      part="delete-button"
+                      class="delete-button inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium text-koe-text-muted transition-colors hover:bg-koe-surface-sunken hover:text-koe-danger disabled:cursor-not-allowed disabled:opacity-60"
+                      aria-label="Delete comment"
+                      title="Delete comment"
+                      ?disabled=${this.deletingComment === comment.id}
+                      @click=${() => this.handleDelete(comment.id)}
+                    >
+                      ${this.icon(ICON_PATHS.trash)}
+                      ${this.deletingComment === comment.id
+                        ? "Deleting..."
+                        : "Delete"}
+                    </button>
+                  `
+                : nothing}
             </div>
+            `}
 
             ${this.openReportPicker === comment.id
               ? this.renderReportPicker(comment.id)

@@ -161,6 +161,9 @@ export interface KoeClient {
     ): Promise<Reaction | null>;
     unreact(commentId: string, emoji: string, token?: string): Promise<void>;
     report(commentId: string, reason: string, token?: string): Promise<Report>;
+    delete(commentId: string, token?: string): Promise<Comment>;
+    pin(commentId: string, token?: string): Promise<Comment>;
+    unpin(commentId: string, token?: string): Promise<Comment>;
   };
   moderation: {
     queue(token?: string): Promise<ModerationQueueResponse>;
@@ -357,6 +360,21 @@ export function createKoeClient(options: KoeClientOptions): KoeClient {
         request(ReportSchema, `/comments/${commentId}/reports`, {
           method: "POST",
           body: { reason },
+          token,
+        }),
+      delete: (commentId, token) =>
+        request(CommentSchema, `/comments/${commentId}`, {
+          method: "DELETE",
+          token,
+        }),
+      pin: (commentId, token) =>
+        request(CommentSchema, `/comments/${commentId}/pin`, {
+          method: "POST",
+          token,
+        }),
+      unpin: (commentId, token) =>
+        request(CommentSchema, `/comments/${commentId}/pin`, {
+          method: "DELETE",
           token,
         }),
     },

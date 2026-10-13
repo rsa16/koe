@@ -169,6 +169,45 @@ describe("Thread Reactions API Seam Integration Tests", () => {
     expect(thread.reactionTotals).toEqual({ "👍": 2 });
   });
 
+  it("replaces the user's previous reaction so each user holds at most one", async () => {
+    const threadId = await createThread("article-single");
+    const token = await anonToken();
+
+    await reactRequest(threadId, token, "👍");
+    await reactRequest(threadId, token, "❤️");
+
+    const thread = await getThread("article-single", token);
+    expect(thread.reactionTotals).toEqual({ "❤️": 1 });
+    expect(thread.userReactions).toEqual(["❤️"]);
+  });
+
+  it("toggles off the current reaction without leaving the previous one", async () => {
+    const threadId = await createThread("article-single-toggle");
+    const token = await anonToken();
+
+    await reactRequest(threadId, token, "👍");
+    await reactRequest(threadId, token, "🎉");
+    const response = await reactRequest(threadId, token, "🎉");
+    expect(response.statusCode).toBe(204);
+
+    const thread = await getThread("article-single-toggle", token);
+    expect(thread.reactionTotals).toEqual({});
+    expect(thread.userReactions).toEqual([]);
+  });
+
+  it("switching emoji does not disturb other users' reactions", async () => {
+    const threadId = await createThread("article-single-others");
+    const token = await anonToken();
+    const otherToken = await anonToken();
+
+    await reactRequest(threadId, otherToken, "👍");
+    await reactRequest(threadId, token, "👍");
+    await reactRequest(threadId, token, "❤️");
+
+    const thread = await getThread("article-single-others");
+    expect(thread.reactionTotals).toEqual({ "👍": 1, "❤️": 1 });
+  });
+
   it("DELETE removes the user's reaction and decrements the total, idempotently", async () => {
     const threadId = await createThread("article-delete");
     const token = await anonToken();

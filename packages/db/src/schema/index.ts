@@ -67,6 +67,7 @@ export const comments = pgTable("comments", {
   downvotes: integer("downvotes").notNull().default(0),
   reactionTotals: jsonb("reaction_totals").notNull().default({}),
   metadata: jsonb("metadata").notNull().default({}),
+  pinnedAt: timestamp("pinned_at", { withTimezone: true }),
   editedAt: timestamp("edited_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

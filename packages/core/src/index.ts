@@ -220,6 +220,7 @@ export const CommentSchema = z.object({
   downvotes: z.number().int().default(0),
   reactionTotals: ReactionTotalsSchema.default({}),
   metadata: z.record(z.unknown()).default({}),
+  pinnedAt: z.coerce.date().nullable().default(null),
   editedAt: z.coerce.date().nullable(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
@@ -229,6 +230,7 @@ export type Comment = z.infer<typeof CommentSchema>;
 export type CommentNode = Comment & {
   authorName: string | null;
   authorAvatarUrl: string | null;
+  authorRole: UserRole | null;
   children: CommentNode[];
   userVote: VoteValue | null;
   userReactions: string[];
@@ -237,6 +239,7 @@ export const CommentNodeSchema: z.ZodType<CommentNode, z.ZodTypeDef, unknown> =
   CommentSchema.extend({
     authorName: z.string().nullable().default(null),
     authorAvatarUrl: z.string().url().nullable().default(null),
+    authorRole: UserRoleSchema.nullable().default(null),
     children: z.lazy(() => z.array(CommentNodeSchema)),
     userVote: VoteValueSchema.nullable().default(null),
     userReactions: z.array(z.string()).default([]),
