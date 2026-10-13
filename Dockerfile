@@ -2,11 +2,17 @@
 FROM node:22-alpine AS build
 WORKDIR /app
 
-# Copy root manifests and workspace configs
+# Copy root manifests and every workspace manifest, so `npm ci` installs the
+# dependencies of all packages `npm run build` will build (turbo runs the whole
+# workspace). Missing a manifest silently drops that package's devDependencies.
 COPY package.json package-lock.json turbo.json tsconfig.base.json ./
+COPY packages/auth/package.json packages/auth/package.json
 COPY packages/core/package.json packages/core/package.json
 COPY packages/db/package.json packages/db/package.json
+COPY packages/renderer/package.json packages/renderer/package.json
+COPY packages/sdk/package.json packages/sdk/package.json
 COPY packages/server/package.json packages/server/package.json
+COPY packages/widget/package.json packages/widget/package.json
 COPY apps/admin/package.json apps/admin/package.json
 
 # Install dependencies across all workspaces
