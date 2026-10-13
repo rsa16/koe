@@ -190,6 +190,7 @@ describe("Webhooks (Event Bus) API Seam Integration Tests", () => {
     expect(payload.id).toBe(request.headers["x-koe-delivery"]);
     expect(payload.data.comment.id).toBe(commentId);
     expect(payload.data.comment.status).toBe("published");
+    expect(payload.data.thread.externalRef).toBe("webhook-post");
   });
 
   it("only delivers events the subscription names", async () => {

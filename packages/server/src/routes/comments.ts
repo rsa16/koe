@@ -5,6 +5,7 @@ import {
   CreateCommentBodySchema,
   CreateCommentParamsSchema,
   EventBus,
+  ThreadSchema,
 } from "@koe/core";
 import { comments, Database, reactions, threads, users, votes } from "@koe/db";
 import { renderMarkdown } from "@koe/renderer";
@@ -158,7 +159,12 @@ export default async function commentsRoutes(
     });
 
     const createdComment = CommentSchema.parse(created);
-    events.emit("comment.created", { comment: createdComment });
+    // Include the thread so subscribers can attribute the comment without a
+    // second lookup (the comment only carries an opaque `threadId`).
+    events.emit("comment.created", {
+      comment: createdComment,
+      thread: ThreadSchema.parse(existingThreads[0]),
+    });
 
     return reply.status(201).send(createdComment);
   };

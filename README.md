@@ -314,6 +314,8 @@ role. State-changing requests must send the `koe_csrf` cookie value back in the
 Domain services emit a fixed catalog of **Domain Events** on an in-process bus.
 An event is an envelope `{ id, type, occurredAt, data }`, where `data` carries
 the entity that changed (for example `{ comment }`, `{ vote }`, `{ report }`).
+`comment.created` also includes the owning thread (`{ comment, thread }`) so a
+subscriber can resolve the thread's `externalRef` without a second request.
 
 | `type` | Emitted when |
 | --- | --- |
