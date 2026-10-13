@@ -829,6 +829,59 @@ describe("<koe-comments> widget", () => {
     expect(element.shadowRoot!.querySelector(".empty")).not.toBeNull();
   });
 
+  it("lets a moderator delete another author's comment", async () => {
+    const client = createKoeClient({ baseUrl });
+    const { accessToken: authorToken } = await client.auth.anonymous();
+    const moderatorToken = await roleToken("moderator");
+    const thread = await client.threads.getByRef("widget-staff-delete");
+    const created = await client.comments.create(
+      thread.id,
+      { bodyMd: "Not the moderator's" },
+      authorToken
+    );
+    await client.moderation.act(created.id, "approve", moderatorToken);
+    localStorage.clear();
+
+    const element = mount(
+      "widget-staff-delete",
+      `token="${moderatorToken}"`
+    );
+    await waitFor(
+      () => element.shadowRoot!.querySelectorAll(".comment").length === 1
+    );
+
+    const deleteButton = element.shadowRoot!.querySelector(
+      ".delete-button"
+    ) as HTMLButtonElement;
+    expect(deleteButton).not.toBeNull();
+    deleteButton.click();
+
+    await waitFor(
+      () => element.shadowRoot!.querySelectorAll(".comment").length === 0
+    );
+  });
+
+  it("does not show the delete control to a guest on another author's comment", async () => {
+    const client = createKoeClient({ baseUrl });
+    const { accessToken: authorToken } = await client.auth.anonymous();
+    const moderatorToken = await roleToken("moderator");
+    const thread = await client.threads.getByRef("widget-guest-other-delete");
+    const created = await client.comments.create(
+      thread.id,
+      { bodyMd: "Someone else's comment" },
+      authorToken
+    );
+    await client.moderation.act(created.id, "approve", moderatorToken);
+    localStorage.clear();
+
+    const element = mount("widget-guest-other-delete");
+    await waitFor(
+      () => element.shadowRoot!.querySelectorAll(".comment").length === 1
+    );
+
+    expect(element.shadowRoot!.querySelector(".delete-button")).toBeNull();
+  });
+
   it("routes requests through a non-default api-base prefix", async () => {
     const realFetch = globalThis.fetch;
     const prefixedUrls: string[] = [];

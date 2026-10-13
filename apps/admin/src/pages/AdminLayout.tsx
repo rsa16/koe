@@ -20,6 +20,7 @@ export interface AdminOutletContext {
 
 const ADMIN_NAV = [
   { label: "Moderation Queue", value: "/queue" },
+  { label: "Comments", value: "/comments" },
   { label: "Users", value: "/users" },
   { label: "Settings", value: "/settings" },
 ];

@@ -1,4 +1,8 @@
 import {
+  AdminBulkCommentActionBodySchema,
+  AdminBulkCommentActionResponseSchema,
+  AdminCommentListResponseSchema,
+  AdminCommentThreadListResponseSchema,
   AdminSessionSchema,
   AdminSessionUserSchema,
   AdminSettingsSchema,
@@ -10,6 +14,10 @@ import {
   UserSchema,
 } from "@koe/core";
 import type {
+  AdminBulkCommentActionBody,
+  AdminCommentListQueryInput,
+  AdminCommentListResponse,
+  AdminCommentThread,
   AdminSession,
   AdminSettings,
   AdminUpdateUserBody,
@@ -200,4 +208,58 @@ export async function fetchSettings(): Promise<AdminSettings> {
     throw await toError(response);
   }
   return AdminSettingsSchema.parse(await response.json());
+}
+
+export type CommentListParams = AdminCommentListQueryInput;
+
+export async function fetchAdminComments(
+  params: CommentListParams = {}
+): Promise<AdminCommentListResponse> {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== "") {
+      query.set(key, String(value));
+    }
+  }
+  const suffix = query.toString();
+  const response = await request(
+    apiPath(`/admin/comments${suffix ? `?${suffix}` : ""}`)
+  );
+  if (!response.ok) {
+    throw await toError(response);
+  }
+  return AdminCommentListResponseSchema.parse(await response.json());
+}
+
+export async function fetchAdminCommentThreads(
+  search?: string
+): Promise<AdminCommentThread[]> {
+  const query = search ? `?search=${encodeURIComponent(search)}` : "";
+  const response = await request(apiPath(`/admin/comments/threads${query}`));
+  if (!response.ok) {
+    throw await toError(response);
+  }
+  return AdminCommentThreadListResponseSchema.parse(
+    await response.json()
+  ).threads;
+}
+
+export async function bulkModerateComments(
+  body: AdminBulkCommentActionBody
+): Promise<number> {
+  const parsed = AdminBulkCommentActionBodySchema.parse(body);
+  const csrfToken = readCookie(CSRF_COOKIE);
+  const response = await request(apiPath("/admin/comments/actions"), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(csrfToken ? { [CSRF_HEADER]: csrfToken } : {}),
+    },
+    body: JSON.stringify(parsed),
+  });
+  if (!response.ok) {
+    throw await toError(response);
+  }
+  return AdminBulkCommentActionResponseSchema.parse(await response.json())
+    .updated;
 }

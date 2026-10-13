@@ -379,6 +379,88 @@ export type ModerationActionListResponse = z.infer<
   typeof ModerationActionListResponseSchema
 >;
 
+// Admin comments console: a filterable, paginated view over every comment,
+// not just the pending/reported queue.
+export const AdminCommentListQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+  status: CommentStatusSchema.optional(),
+  threadId: z.string().uuid().optional(),
+  authorId: z.string().uuid().optional(),
+  search: z.string().trim().min(1).optional(),
+});
+export type AdminCommentListQuery = z.infer<typeof AdminCommentListQuerySchema>;
+export type AdminCommentListQueryInput = z.input<
+  typeof AdminCommentListQuerySchema
+>;
+
+export const AdminCommentItemSchema = CommentSchema.extend({
+  thread: ThreadContextSchema,
+  authorName: z.string().nullable(),
+  authorEmail: z.string().email().nullable(),
+});
+export type AdminCommentItem = z.infer<typeof AdminCommentItemSchema>;
+
+export const AdminCommentListResponseSchema = z.object({
+  comments: z.array(AdminCommentItemSchema),
+  total: z.number().int().nonnegative(),
+  page: z.number().int().min(1),
+  pageSize: z.number().int().min(1),
+});
+export type AdminCommentListResponse = z.infer<
+  typeof AdminCommentListResponseSchema
+>;
+
+// Threads that currently hold comments, with a comment count. Powers the
+// console's "filter comments by page" selector.
+export const AdminCommentThreadListQuerySchema = z.object({
+  search: z.string().trim().min(1).optional(),
+});
+export type AdminCommentThreadListQuery = z.infer<
+  typeof AdminCommentThreadListQuerySchema
+>;
+
+export const AdminCommentThreadSchema = ThreadContextSchema.extend({
+  commentCount: z.number().int().nonnegative(),
+});
+export type AdminCommentThread = z.infer<typeof AdminCommentThreadSchema>;
+
+export const AdminCommentThreadListResponseSchema = z.object({
+  threads: z.array(AdminCommentThreadSchema),
+});
+export type AdminCommentThreadListResponse = z.infer<
+  typeof AdminCommentThreadListResponseSchema
+>;
+
+// Bulk comment actions available from the admin console. `pin`/`unpin` adjust
+// curation; the rest map onto the existing moderation action verbs.
+export const AdminCommentBulkActionVerbSchema = z.enum([
+  "approve",
+  "reject",
+  "delete",
+  "spam",
+  "pin",
+  "unpin",
+]);
+export type AdminCommentBulkActionVerb = z.infer<
+  typeof AdminCommentBulkActionVerbSchema
+>;
+
+export const AdminBulkCommentActionBodySchema = z.object({
+  commentIds: z.array(z.string().uuid()).min(1).max(100),
+  action: AdminCommentBulkActionVerbSchema,
+});
+export type AdminBulkCommentActionBody = z.infer<
+  typeof AdminBulkCommentActionBodySchema
+>;
+
+export const AdminBulkCommentActionResponseSchema = z.object({
+  updated: z.number().int().nonnegative(),
+});
+export type AdminBulkCommentActionResponse = z.infer<
+  typeof AdminBulkCommentActionResponseSchema
+>;
+
 // Auth schemas
 // An access/refresh token pair plus the identity it belongs to. Returned by
 // guest login, OAuth login, and refresh — hence the neutral name.

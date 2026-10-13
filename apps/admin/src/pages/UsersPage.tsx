@@ -290,6 +290,15 @@ export default function UsersPage() {
                           spacing={1}
                           justifyContent="flex-end"
                         >
+                          <Button
+                            size="small"
+                            disabled={busy}
+                            onClick={() =>
+                              navigate(`/comments?authorId=${user.id}`)
+                            }
+                          >
+                            Comments
+                          </Button>
                           {user.status === "active" ? (
                             <Button
                               size="small"

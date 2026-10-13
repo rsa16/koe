@@ -312,6 +312,76 @@ describe("Comment Curation API Seam Integration Tests", () => {
       );
     });
 
+    it("forbids members from deleting someone else's comment", async () => {
+      const threadId = await createThread("delete-member-forbidden");
+      const authorToken = await anonToken();
+      const memberToken = await userToken("member");
+      const comment = await postComment(threadId, authorToken, "not yours");
+      await approveComment(comment.id as string);
+
+      const response = await deleteRequest(comment.id as string, memberToken);
+
+      expect(response.statusCode).toBe(403);
+    });
+
+    it("lets a moderator delete another author's comment", async () => {
+      const threadId = await createThread("delete-mod");
+      const authorToken = await anonToken();
+      const moderatorToken = await userToken("moderator");
+      const comment = await postComment(threadId, authorToken, "remove me");
+      await approveComment(comment.id as string);
+
+      const response = await deleteRequest(
+        comment.id as string,
+        moderatorToken
+      );
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().status).toBe("deleted");
+
+      const list = await listComments(threadId);
+      expect(list.total).toBe(0);
+      expect(list.comments).toHaveLength(0);
+    });
+
+    it("lets an admin delete another author's comment", async () => {
+      const threadId = await createThread("delete-admin");
+      const authorToken = await anonToken();
+      const adminToken = await userToken("admin");
+      const comment = await postComment(threadId, authorToken, "remove me");
+      await approveComment(comment.id as string);
+
+      const response = await deleteRequest(comment.id as string, adminToken);
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().status).toBe("deleted");
+    });
+
+    it("records a moderation action when staff delete another author's comment", async () => {
+      const threadId = await createThread("delete-mod-audit");
+      const authorToken = await anonToken();
+      const moderatorToken = await userToken("moderator");
+      const adminToken = await userToken("admin");
+      const comment = await postComment(threadId, authorToken, "audit me");
+      await approveComment(comment.id as string);
+
+      await deleteRequest(comment.id as string, moderatorToken);
+
+      const audit = await app.inject({
+        method: "GET",
+        url: "/api/v1/moderation/actions",
+        headers: { authorization: `Bearer ${adminToken}` },
+      });
+
+      const entry = audit
+        .json()
+        .actions.find(
+          (record: { targetId: string }) => record.targetId === comment.id
+        );
+      expect(entry.action).toBe("delete");
+      expect(entry.metadata.previousStatus).toBe("published");
+    });
+
     it("soft-deletes the author's own leaf comment and hides it", async () => {
       const threadId = await createThread("delete-leaf");
       const authorToken = await anonToken();

@@ -764,7 +764,7 @@ export class KoeComments extends LitElement {
     return (
       comment.status !== "deleted" &&
       this.currentUser !== null &&
-      this.currentUser.id === comment.authorId
+      (this.currentUser.id === comment.authorId || this.canModerate)
     );
   }
 

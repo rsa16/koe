@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import AdminLayout from "./pages/AdminLayout";
+import CommentsPage from "./pages/CommentsPage";
 import LoginPage from "./pages/LoginPage";
 import ModerationQueuePage from "./pages/ModerationQueuePage";
 import SettingsPage from "./pages/SettingsPage";
@@ -11,6 +12,7 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route element={<AdminLayout />}>
         <Route path="/queue" element={<ModerationQueuePage />} />
+        <Route path="/comments" element={<CommentsPage />} />
         <Route path="/users" element={<UsersPage />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Route>

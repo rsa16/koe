@@ -8,7 +8,15 @@ import {
   ThreadSchema,
   UserRole,
 } from "@koe/core";
-import { comments, Database, reactions, threads, users, votes } from "@koe/db";
+import {
+  comments,
+  Database,
+  moderationActions,
+  reactions,
+  threads,
+  users,
+  votes,
+} from "@koe/db";
 import { renderMarkdown } from "@koe/renderer";
 import { and, eq, gt, inArray, notInArray, or, sql } from "drizzle-orm";
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
@@ -393,9 +401,10 @@ export default async function commentsRoutes(
     };
   };
 
-  // Comments: delete own comment (soft delete, keeps replies as tombstones)
+  // Comments: delete a comment (soft delete, keeps replies as tombstones)
+  // Authors may delete their own comment; moderators and admins may delete any.
   // DELETE /api/v1/comments/:id
-  const deleteOwnCommentHandler = async (
+  const deleteCommentHandler = async (
     request: FastifyRequest,
     reply: FastifyReply
   ) => {
@@ -420,7 +429,11 @@ export default async function commentsRoutes(
       );
     }
 
-    if (found[0].authorId !== request.user!.id) {
+    const actor = request.user!;
+    const isAuthor = found[0].authorId === actor.id;
+    const isStaff = actor.role === "moderator" || actor.role === "admin";
+
+    if (!isAuthor && !isStaff) {
       return app.sendProblem(
         reply,
         403,
@@ -430,11 +443,25 @@ export default async function commentsRoutes(
       );
     }
 
-    const [row] = await db
-      .update(comments)
-      .set({ status: "deleted", updatedAt: new Date() })
-      .where(eq(comments.id, commentId))
-      .returning();
+    const row = await db.transaction(async (tx: Database) => {
+      const [updated] = await tx
+        .update(comments)
+        .set({ status: "deleted", updatedAt: new Date() })
+        .where(eq(comments.id, commentId))
+        .returning();
+
+      if (!isAuthor) {
+        await tx.insert(moderationActions).values({
+          actorId: actor.id,
+          action: "delete",
+          targetType: "comment",
+          targetId: commentId,
+          metadata: { previousStatus: found[0].status },
+        });
+      }
+
+      return updated;
+    });
 
     const comment = CommentSchema.parse(row);
     events.emit("comment.deleted", { comment });
@@ -469,7 +496,7 @@ export default async function commentsRoutes(
   app.delete(
     "/api/v1/comments/:id",
     { preHandler: [app.authenticate, app.requireActiveUser] },
-    deleteOwnCommentHandler
+    deleteCommentHandler
   );
 }
 

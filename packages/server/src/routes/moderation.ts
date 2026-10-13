@@ -28,14 +28,14 @@ export interface ModerationRoutesOptions {
   events: EventBus;
 }
 
-const COMMENT_ACTION_EVENTS: Record<CommentModerationActionVerb, EventName> = {
+export const COMMENT_ACTION_EVENTS: Record<CommentModerationActionVerb, EventName> = {
   approve: "comment.approved",
   reject: "comment.rejected",
   delete: "comment.deleted",
   spam: "comment.updated",
 };
 
-const COMMENT_ACTION_EFFECTS: Record<
+export const COMMENT_ACTION_EFFECTS: Record<
   CommentModerationActionVerb,
   {
     nextStatus: CommentStatus;

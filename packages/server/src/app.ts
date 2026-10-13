@@ -39,6 +39,7 @@ import moderationRoutes from "./routes/moderation.js";
 import usersRoutes from "./routes/users.js";
 import adminRoutes from "./routes/admin.js";
 import adminUsersRoutes from "./routes/admin-users.js";
+import adminCommentsRoutes from "./routes/admin-comments.js";
 import adminSettingsRoutes from "./routes/admin-settings.js";
 
 export interface BuildAppOptions {
@@ -201,6 +202,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   app.register(usersRoutes, { db: options.db });
   app.register(adminRoutes, { db: options.db, jwtSecret, sessionSecret, events });
   app.register(adminUsersRoutes, { db: options.db, events });
+  app.register(adminCommentsRoutes, { db: options.db, events });
   app.register(adminSettingsRoutes, {
     reactionAllowlist,
     preModerationDefault,
