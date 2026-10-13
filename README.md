@@ -47,9 +47,10 @@ web component — with a Material admin UI at `/admin` for moderation.
 - Admin-only role changes via `PATCH /api/v1/users/:id`.
 - **Admin UI** (`/admin`): a React + Material UI single-page app served by the
   API with a working Moderation Queue (pending and reported comments with
-  Approve / Reject / Spam actions). It signs in by exchanging a moderator/admin
-  bearer token for a `SameSite=Lax` session cookie, and state-changing calls are
-  protected by a CSRF double-submit token. Admins additionally get a paginated
+  Approve / Reject / Spam actions). It signs in with Google/Discord OAuth when
+  those providers are configured, or by pasting a moderator/admin bearer token;
+  either way the server exchanges it for a `SameSite=Lax` session cookie, and
+  state-changing calls are protected by a CSRF double-submit token. Admins additionally get a paginated
   **Users** page (search/filter, role changes, suspend/ban/reactivate) and a
   read-only **Settings** page surfacing the effective configuration.
 - Pluggable **Media** upload: the widget posts a selected image to imgbb with a
@@ -157,9 +158,10 @@ For front-end development with hot reload against a running API on port 3000:
 npm --workspace=@koe/admin run dev      # Vite dev server on :5174, proxies /api
 ```
 
-Open `/admin` and sign in with a moderator or admin bearer access token (the demo
-prints a seeded admin token on startup). The server exchanges the token for a
-`SameSite=Lax`, `HttpOnly` session cookie plus a readable `koe_csrf` cookie; the
+Open `/admin` and sign in. When Google/Discord OAuth is configured, use the
+provider buttons; otherwise paste a moderator or admin bearer access token (the
+demo prints a seeded admin token on startup). The server exchanges the token for
+a `SameSite=Lax`, `HttpOnly` session cookie plus a readable `koe_csrf` cookie; the
 SPA echoes that cookie back in the `x-csrf-token` header on every state-changing
 request. See [ADR 0001](docs/adr/0001-hybrid-cross-origin-auth.md) for why the
 public API uses bearer tokens while the admin UI uses cookies.

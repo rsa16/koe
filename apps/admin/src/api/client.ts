@@ -36,6 +36,15 @@ function apiPath(path: string): string {
   return `${API_PREFIX}${path}`;
 }
 
+export type OAuthProvider = "google" | "discord";
+
+// URL of the server-side OAuth start endpoint. The server redirects to the
+// provider and, on callback, a popup page postMessages the access token back
+// to the admin origin (see packages/server/src/oauth-render.ts).
+export function oauthStartUrl(provider: OAuthProvider): string {
+  return apiPath(`/auth/oauth/${provider}`);
+}
+
 export class AdminApiError extends Error {
   readonly status: number;
   readonly type: string;
