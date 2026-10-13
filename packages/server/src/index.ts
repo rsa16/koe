@@ -8,6 +8,11 @@ import {
 } from "./plugins/rate-limit.js";
 import { DEFAULT_WEBHOOK_TIMEOUT_MS } from "./events/index.js";
 import { parseTrustProxy } from "./trust-proxy.js";
+import {
+  DEFAULT_ADDRESS_SWEEP_INTERVAL_MS,
+  DEFAULT_ANONYMOUS_PRUNE_AGE_DAYS,
+  pruneExpiredAddresses,
+} from "./plugins/network-addresses.js";
 import dotenv from "dotenv";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -75,6 +80,15 @@ const adminDistPath = path.resolve(
   process.env.ADMIN_DIST_PATH ?? path.join(__dirname, "../../../apps/admin/dist")
 );
 
+const networkBlocksEnabled =
+  process.env.NETWORK_BLOCKS_ENABLED?.trim().toLowerCase() === "true";
+const addressRetentionMs =
+  envInt("ANONYMOUS_PRUNE_AGE_DAYS", DEFAULT_ANONYMOUS_PRUNE_AGE_DAYS) *
+  24 *
+  60 *
+  60 *
+  1000;
+
 function parseWebhookSubscriptions(raw: string | undefined) {
   if (!raw) {
     return undefined;
@@ -107,6 +121,10 @@ const app = buildApp({
   clientOrigin: process.env.CLIENT_ORIGIN,
   reactionAllowlist,
   rateLimits,
+  networkAddresses: {
+    enabled: networkBlocksEnabled,
+    retentionMs: addressRetentionMs,
+  },
   adminDistPath,
   adminBase: process.env.ADMIN_BASE,
   webhookSubscriptions: parseWebhookSubscriptions(
@@ -123,3 +141,12 @@ app.listen({ port, host }, (err, address) => {
   }
   console.log(`Server listening on ${address}`);
 });
+
+if (networkBlocksEnabled && addressRetentionMs > 0) {
+  const sweep = setInterval(() => {
+    pruneExpiredAddresses(db, addressRetentionMs).catch((error) => {
+      console.error("Failed to prune captured client addresses", error);
+    });
+  }, DEFAULT_ADDRESS_SWEEP_INTERVAL_MS);
+  sweep.unref();
+}

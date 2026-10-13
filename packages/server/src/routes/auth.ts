@@ -128,7 +128,7 @@ export default async function authRoutes(
   // Auth: Anonymous guest login
   // POST /api/v1/auth/anonymous
   const anonymousHandler = async (
-    _request: FastifyRequest,
+    request: FastifyRequest,
     reply: FastifyReply
   ) => {
     const guestUuid = crypto.randomUUID();
@@ -150,6 +150,8 @@ export default async function authRoutes(
 
     const user = UserSchema.parse(userRow);
     const { accessToken, refreshToken } = await issueTokens(user);
+
+    await app.captureAddress(user.id, request.ip);
 
     return reply
       .status(200)

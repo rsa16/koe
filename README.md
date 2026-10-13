@@ -189,6 +189,8 @@ through.
 | `SESSION_SECRET` | no | Signing secret for admin session cookies. Defaults to `JWT_SECRET`. |
 | `TRUST_PROXY` | no | Trusted reverse proxies used to determine the real client IP. Unset trusts nothing, so `X-Forwarded-For` is ignored and the socket peer is used; this is the safe default. Set to a comma-separated list of proxy addresses or CIDR ranges (e.g. `127.0.0.1,10.0.0.0/8`). A bare hop count is rejected: it cannot validate the immediate peer, so a directly-reachable client could spoof its address. |
 | `TRUST_PROXY_ALLOW_UNBOUNDED` | no | Set to `true` to permit `TRUST_PROXY=true` (or `*`, or a catch-all range), which trusts every proxy. Off by default because it lets clients spoof their address. |
+| `NETWORK_BLOCKS_ENABLED` | no | Enables capture of the client address on authenticated write requests, so a later ban can auto-derive time-boxed Network Blocks. Off by default; when off, no address is ever stored. Requires `TRUST_PROXY` to see the real client IP behind a proxy. |
+| `ANONYMOUS_PRUNE_AGE_DAYS` | no | Retention window, in days, for captured client addresses (and the intended window for pruning inactive anonymous Users). Default `30`. Stale addresses are swept hourly while capture is enabled. |
 | `ADMIN_DIST_PATH` | no | Filesystem path to the built admin SPA. Defaults to `apps/admin/dist`. If `index.html` is absent, `/admin` is not served. |
 | `RATE_LIMIT_WINDOW_MS` | no | Window for the comment/vote/reaction rate limits, in milliseconds. Default `60000`. |
 | `RATE_LIMIT_COMMENTS` | no | Max comment requests per window per `User`/IP. Default `10`. |

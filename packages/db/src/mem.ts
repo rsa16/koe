@@ -40,6 +40,17 @@ export async function createMemDb() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
+    CREATE TABLE user_network_addresses (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      ip TEXT NOT NULL,
+      first_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (user_id, ip)
+    );
+
+    CREATE INDEX idx_user_network_addresses_last_seen ON user_network_addresses (last_seen_at);
+
     CREATE TABLE threads (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       external_ref TEXT NOT NULL UNIQUE,

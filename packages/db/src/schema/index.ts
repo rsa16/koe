@@ -37,6 +37,17 @@ export const identities = pgTable("identities", {
   index("idx_identities_user_id").on(table.userId),
 ]);
 
+export const userNetworkAddresses = pgTable("user_network_addresses", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  ip: text("ip").notNull(),
+  firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull().defaultNow(),
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("idx_user_network_addresses_user_ip").on(table.userId, table.ip),
+  index("idx_user_network_addresses_last_seen").on(table.lastSeenAt),
+]);
+
 export const threads = pgTable("threads", {
   id: uuid("id").primaryKey().defaultRandom(),
   externalRef: text("external_ref").notNull().unique(),

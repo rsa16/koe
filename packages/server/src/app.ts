@@ -23,6 +23,9 @@ import problemDetailsPlugin from "./plugins/problem-details.js";
 import authenticatePlugin from "./plugins/authenticate.js";
 import adminSessionPlugin from "./plugins/admin-session.js";
 import rateLimitPlugin, { RateLimitConfig } from "./plugins/rate-limit.js";
+import networkAddressesPlugin, {
+  NetworkAddressesConfig,
+} from "./plugins/network-addresses.js";
 import { TrustProxyConfig } from "./trust-proxy.js";
 
 import healthRoutes from "./routes/health.js";
@@ -52,6 +55,7 @@ export interface BuildAppOptions {
   adminDistPath?: string;
   adminBase?: string;
   rateLimits?: RateLimitConfig;
+  networkAddresses?: NetworkAddressesConfig;
   webhookSubscriptions?: WebhookSubscription[];
   webhookTimeoutMs?: number;
   fetchImpl?: FetchLike;
@@ -157,6 +161,11 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   if (options.rateLimits) {
     app.register(rateLimitPlugin, { jwtSecret });
   }
+  app.register(networkAddressesPlugin, {
+    db: options.db,
+    enabled: options.networkAddresses?.enabled ?? false,
+    retentionMs: options.networkAddresses?.retentionMs ?? 0,
+  });
 
   app.register(healthRoutes);
   app.register(authRoutes, {

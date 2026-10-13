@@ -71,6 +71,13 @@
       "when": 1791929691248,
       "tag": "0009_silky_guardian",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791930531902,
+      "tag": "0010_fine_rumiko_fujikawa",
+      "breakpoints": true
     }
   ]
 }

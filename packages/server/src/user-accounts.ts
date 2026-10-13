@@ -1,6 +1,7 @@
 import { IdentityProvider, User, UserSchema } from "@koe/core";
 import { comments, Database, identities, users } from "@koe/db";
 import { and, eq } from "drizzle-orm";
+import { reassignAddresses } from "./plugins/network-addresses.js";
 import { OAuthProfile } from "./oauth.js";
 
 async function findUserById(db: Database, id: string) {
@@ -26,6 +27,9 @@ export async function mergeGuestIntoUser(
       .update(comments)
       .set({ authorId: targetUserId })
       .where(eq(comments.authorId, guestUserId));
+    // Re-point captured addresses so a later ban still sees where the guest
+    // acted.
+    await reassignAddresses(tx, guestUserId, targetUserId);
     await tx.delete(users).where(eq(users.id, guestUserId));
   });
 }
