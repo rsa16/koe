@@ -1,5 +1,5 @@
 import { signSessionValue, verifyAccessToken } from "@koe/auth";
-import { AdminSessionSchema, AdminSessionUserSchema } from "@koe/core";
+import { AdminSessionSchema, AdminSessionUserSchema, EventBus } from "@koe/core";
 import { Database, users } from "@koe/db";
 import { eq } from "drizzle-orm";
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
@@ -16,14 +16,19 @@ export interface AdminRoutesOptions {
   db: Database;
   jwtSecret: string;
   sessionSecret: string;
+  events: EventBus;
 }
 
 export default async function adminRoutes(
   app: FastifyInstance,
   options: AdminRoutesOptions
 ) {
-  const { db, jwtSecret, sessionSecret } = options;
-  const { queueHandler, actionHandler } = createModerationHandlers(app, db);
+  const { db, jwtSecret, sessionSecret, events } = options;
+  const { queueHandler, actionHandler } = createModerationHandlers(
+    app,
+    db,
+    events
+  );
 
   // Admin session: exchange a bearer access token for a session cookie
   // POST /api/v1/admin/session

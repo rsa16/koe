@@ -3,9 +3,13 @@ import {
   CommentSchema,
   CommentStatus,
   CreateModerationActionBodySchema,
+  EventBus,
+  EventName,
   ModerationActionListResponseSchema,
   ModerationQueueResponseSchema,
+  ReportSchema,
   ThreadContext,
+  USER_MODERATION_EVENT,
   UserSchema,
 } from "@koe/core";
 import {
@@ -21,7 +25,15 @@ import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
 export interface ModerationRoutesOptions {
   db: Database;
+  events: EventBus;
 }
+
+const COMMENT_ACTION_EVENTS: Record<CommentModerationActionVerb, EventName> = {
+  approve: "comment.approved",
+  reject: "comment.rejected",
+  delete: "comment.deleted",
+  spam: "comment.updated",
+};
 
 const COMMENT_ACTION_EFFECTS: Record<
   CommentModerationActionVerb,
@@ -53,7 +65,11 @@ const COMMENT_ACTION_EFFECTS: Record<
   },
 };
 
-export function createModerationHandlers(app: FastifyInstance, db: Database) {
+export function createModerationHandlers(
+  app: FastifyInstance,
+  db: Database,
+  events: EventBus
+) {
   // Moderation: queue
   // GET /api/v1/moderation/queue
   const queueHandler = async (
@@ -174,7 +190,9 @@ export function createModerationHandlers(app: FastifyInstance, db: Database) {
         return user;
       });
 
-      return reply.status(200).send(UserSchema.parse(updated));
+      const user = UserSchema.parse(updated);
+      events.emit(USER_MODERATION_EVENT[action], { user });
+      return reply.status(200).send(user);
     }
 
     const { commentId, action } = body;
@@ -195,13 +213,11 @@ export function createModerationHandlers(app: FastifyInstance, db: Database) {
       );
     }
 
-    const openReports = await db
-      .select({ id: reports.id })
+    const openReports: Array<typeof reports.$inferSelect> = await db
+      .select()
       .from(reports)
-      .where(
-        and(eq(reports.commentId, commentId), eq(reports.status, "open"))
-      )
-      .limit(1);
+      .where(and(eq(reports.commentId, commentId), eq(reports.status, "open")));
+    const openReportIds = openReports.map((report) => report.id);
     const hasOpenReports = openReports.length > 0;
 
     const effect = COMMENT_ACTION_EFFECTS[action];
@@ -223,32 +239,48 @@ export function createModerationHandlers(app: FastifyInstance, db: Database) {
     const status = effect.nextStatus;
     const reportStatus = effect.reportStatus;
 
-    const updated = await db.transaction(async (tx: Database) => {
-      const [comment] = await tx
-        .update(comments)
-        .set({ status })
-        .where(eq(comments.id, commentId))
-        .returning();
+    const { row, resolvedReports } = await db.transaction(
+      async (tx: Database) => {
+        const [comment] = await tx
+          .update(comments)
+          .set({ status })
+          .where(eq(comments.id, commentId))
+          .returning();
 
-      await tx
-        .update(reports)
-        .set({ status: reportStatus, updatedAt: new Date() })
-        .where(
-          and(eq(reports.commentId, commentId), eq(reports.status, "open"))
-        );
+        await tx
+          .update(reports)
+          .set({ status: reportStatus, updatedAt: new Date() })
+          .where(
+            and(eq(reports.commentId, commentId), eq(reports.status, "open"))
+          );
 
-      await tx.insert(moderationActions).values({
-        actorId: request.user!.id,
-        action,
-        targetType: "comment",
-        targetId: commentId,
-        metadata: { previousStatus: found[0].status },
-      });
+        const tapped =
+          reportStatus === "resolved" && openReportIds.length > 0
+            ? await tx
+                .select()
+                .from(reports)
+                .where(inArray(reports.id, openReportIds))
+            : [];
 
-      return comment;
-    });
+        await tx.insert(moderationActions).values({
+          actorId: request.user!.id,
+          action,
+          targetType: "comment",
+          targetId: commentId,
+          metadata: { previousStatus: found[0].status },
+        });
 
-    return reply.status(200).send(CommentSchema.parse(updated));
+        return { row: comment, resolvedReports: tapped };
+      }
+    );
+
+    const comment = CommentSchema.parse(row);
+    events.emit(COMMENT_ACTION_EVENTS[action], { comment });
+    for (const report of resolvedReports) {
+      events.emit("report.resolved", { report: ReportSchema.parse(report) });
+    }
+
+    return reply.status(200).send(comment);
   };
 
   // Moderation: audit log
@@ -288,7 +320,8 @@ export default async function moderationRoutes(
 ) {
   const { queueHandler, actionHandler, auditHandler } = createModerationHandlers(
     app,
-    options.db
+    options.db,
+    options.events
   );
 
   app.get(

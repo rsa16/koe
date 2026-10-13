@@ -1,10 +1,12 @@
 import { buildApp } from "./app.js";
 import { createDbClient } from "@koe/db";
+import { WebhookSubscriptionsSchema } from "@koe/core";
 import { createDiscordOAuthProvider, createGoogleOAuthProvider } from "./oauth.js";
 import {
   DEFAULT_DUPLICATE_COMMENT_WINDOW_MS,
   DEFAULT_RATE_LIMIT_WINDOW_MS,
 } from "./plugins/rate-limit.js";
+import { DEFAULT_WEBHOOK_TIMEOUT_MS } from "./events/index.js";
 import dotenv from "dotenv";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -72,6 +74,25 @@ const adminDistPath = path.resolve(
   process.env.ADMIN_DIST_PATH ?? path.join(__dirname, "../../../apps/admin/dist")
 );
 
+function parseWebhookSubscriptions(raw: string | undefined) {
+  if (!raw) {
+    return undefined;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error("WEBHOOK_SUBSCRIPTIONS must be a valid JSON array");
+  }
+  const result = WebhookSubscriptionsSchema.safeParse(parsed);
+  if (!result.success) {
+    throw new Error(
+      `WEBHOOK_SUBSCRIPTIONS is invalid: ${result.error.message}`
+    );
+  }
+  return result.data;
+}
+
 const app = buildApp({
   db,
   jwtSecret,
@@ -83,6 +104,10 @@ const app = buildApp({
   rateLimits,
   adminDistPath,
   adminBase: process.env.ADMIN_BASE,
+  webhookSubscriptions: parseWebhookSubscriptions(
+    process.env.WEBHOOK_SUBSCRIPTIONS
+  ),
+  webhookTimeoutMs: envInt("WEBHOOK_TIMEOUT_MS", DEFAULT_WEBHOOK_TIMEOUT_MS),
   logger: true,
 });
 

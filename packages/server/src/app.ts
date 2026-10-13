@@ -2,12 +2,22 @@ import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
 import sensible from "@fastify/sensible";
 import fastifyStatic from "@fastify/static";
-import { DEFAULT_EMOJI_ALLOWLIST, EmojiAllowlistSchema } from "@koe/core";
+import {
+  DEFAULT_EMOJI_ALLOWLIST,
+  EmojiAllowlistSchema,
+  WebhookSubscription,
+  WebhookSubscriptionsSchema,
+} from "@koe/core";
 import { Database } from "@koe/db";
 import Fastify, { FastifyInstance } from "fastify";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { DiscordOAuthProvider, GoogleOAuthProvider } from "./oauth.js";
+import {
+  createEventBus,
+  createWebhookDispatcher,
+  FetchLike,
+} from "./events/index.js";
 
 import problemDetailsPlugin from "./plugins/problem-details.js";
 import authenticatePlugin from "./plugins/authenticate.js";
@@ -40,6 +50,9 @@ export interface BuildAppOptions {
   adminDistPath?: string;
   adminBase?: string;
   rateLimits?: RateLimitConfig;
+  webhookSubscriptions?: WebhookSubscription[];
+  webhookTimeoutMs?: number;
+  fetchImpl?: FetchLike;
 }
 
 const DEFAULT_ADMIN_BASE = "/admin/";
@@ -103,6 +116,31 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   );
   const preModerationDefault = options.preModerationDefault ?? false;
 
+  const events = createEventBus({
+    onError: (error, event) =>
+      app.log.error(
+        { err: error, event: event.type },
+        "event listener failed"
+      ),
+  });
+  const webhookSubscriptions = WebhookSubscriptionsSchema.parse(
+    options.webhookSubscriptions ?? []
+  );
+  const webhooks = createWebhookDispatcher(events, webhookSubscriptions, {
+    fetchImpl: options.fetchImpl,
+    timeoutMs: options.webhookTimeoutMs,
+    onError: (error, subscription, event) =>
+      app.log.warn(
+        { err: error, url: subscription.url, event: event.type },
+        "webhook delivery failed"
+      ),
+  });
+  app.decorate("events", events);
+  app.decorate("webhooks", webhooks);
+  app.addHook("onClose", async () => {
+    webhooks.stop();
+  });
+
   app.register(sensible);
   app.register(cookie);
   app.register(cors, {
@@ -131,21 +169,24 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   app.register(commentsRoutes, {
     db: options.db,
     rateLimits: options.rateLimits,
+    events,
   });
   app.register(votesRoutes, {
     db: options.db,
     rateLimits: options.rateLimits,
+    events,
   });
   app.register(reactionsRoutes, {
     db: options.db,
     allowlist: reactionAllowlist,
     rateLimits: options.rateLimits,
+    events,
   });
-  app.register(reportsRoutes, { db: options.db });
-  app.register(moderationRoutes, { db: options.db });
+  app.register(reportsRoutes, { db: options.db, events });
+  app.register(moderationRoutes, { db: options.db, events });
   app.register(usersRoutes, { db: options.db });
-  app.register(adminRoutes, { db: options.db, jwtSecret, sessionSecret });
-  app.register(adminUsersRoutes, { db: options.db });
+  app.register(adminRoutes, { db: options.db, jwtSecret, sessionSecret, events });
+  app.register(adminUsersRoutes, { db: options.db, events });
   app.register(adminSettingsRoutes, {
     reactionAllowlist,
     preModerationDefault,

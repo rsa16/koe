@@ -2,6 +2,7 @@ import {
   CreateReactionBodySchema,
   DeleteReactionParamsSchema,
   EmojiSchema,
+  EventBus,
   ReactionSchema,
 } from "@koe/core";
 import { comments, Database, reactions, threads } from "@koe/db";
@@ -20,6 +21,7 @@ export interface ReactionsRoutesOptions {
   db: Database;
   allowlist: string[];
   rateLimits?: RateLimitConfig;
+  events: EventBus;
 }
 
 type TargetType = "comment" | "thread";
@@ -32,7 +34,7 @@ export default async function reactionsRoutes(
   app: FastifyInstance,
   options: ReactionsRoutesOptions
 ) {
-  const { db, allowlist } = options;
+  const { db, allowlist, events } = options;
 
   const allowedEmojiSchema = EmojiSchema.refine(
     (emoji) => allowlist.includes(emoji),
@@ -183,7 +185,10 @@ export default async function reactionsRoutes(
       if (result.status === 204) {
         return reply.status(204).send();
       }
-      return reply.status(201).send(ReactionSchema.parse(result.reaction));
+
+      const reaction = ReactionSchema.parse(result.reaction);
+      events.emit("reaction.created", { reaction });
+      return reply.status(201).send(reaction);
     };
 
     // Reactions: remove the current user's reaction (idempotent)

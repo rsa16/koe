@@ -7,6 +7,9 @@ import {
   UserSchema,
   ThreadSchema,
   CommentSchema,
+  DomainEventSchema,
+  EventNameSchema,
+  WebhookSubscriptionSchema,
 } from "./index.js";
 
 describe("Core Zod Schemas", () => {
@@ -162,5 +165,41 @@ describe("Core Zod Schemas", () => {
       pageSize: 20,
     });
     expect(parsed.success).toBe(true);
+  });
+
+  it("recognises the fixed event catalog and rejects unknown events", () => {
+    expect(EventNameSchema.safeParse("comment.created").success).toBe(true);
+    expect(EventNameSchema.safeParse("report.resolved").success).toBe(true);
+    expect(EventNameSchema.safeParse("comment.exploded").success).toBe(false);
+  });
+
+  it("validates a domain event envelope", () => {
+    const parsed = DomainEventSchema.safeParse({
+      id: "123e4567-e89b-12d3-a456-426614174000",
+      type: "vote.created",
+      occurredAt: "2026-08-19T00:00:00.000Z",
+      data: { vote: { id: "v1" } },
+    });
+    expect(parsed.success).toBe(true);
+  });
+
+  it("defaults a webhook subscription to active and requires at least one event", () => {
+    const parsed = WebhookSubscriptionSchema.safeParse({
+      url: "https://example.com/hooks",
+      secret: "s3cret",
+      events: ["comment.created"],
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.active).toBe(true);
+    }
+
+    expect(
+      WebhookSubscriptionSchema.safeParse({
+        url: "https://example.com/hooks",
+        secret: "s3cret",
+        events: [],
+      }).success
+    ).toBe(false);
   });
 });

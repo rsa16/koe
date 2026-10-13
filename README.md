@@ -44,6 +44,9 @@ web component — with a Material admin UI at `/admin` for moderation.
   capped per `User` (guests fall back to their IP) by `@fastify/rate-limit`;
   identical `body_md` from the same author inside the duplicate window is
   rejected with `409`.
+- **Event bus & webhooks**: the server emits a fixed catalog of domain events
+  (comment/report/user/vote/reaction lifecycle) on an in-process bus and POSTs
+  HMAC-SHA256-signed payloads to subscribed URLs.
 - Admin-only role changes via `PATCH /api/v1/users/:id`.
 - **Admin UI** (`/admin`): a React + Material UI single-page app served by the
   API with a working Moderation Queue (pending and reported comments with
@@ -190,6 +193,8 @@ through.
 | `RATE_LIMIT_VOTES` | no | Max vote requests per window per `User`/IP. Default `60`. |
 | `RATE_LIMIT_REACTIONS` | no | Max reaction requests per window per `User`/IP. Default `60`. |
 | `DUPLICATE_COMMENT_WINDOW_MS` | no | Reject an identical `body_md` from the same author within this window, in milliseconds. Default `30000`; `0` disables the guard. |
+| `WEBHOOK_SUBSCRIPTIONS` | no | JSON array of webhook subscriptions (`{ url, secret, events, active? }`). Omit to disable webhooks. See [Extensibility](#extensibility). |
+| `WEBHOOK_TIMEOUT_MS` | no | Per-delivery timeout for outbound webhooks, in milliseconds. Default `10000`. |
 
 All configuration is environment-only and read-only at runtime: the admin UI
 Settings page displays the effective values (`commentDepthCap`,
@@ -301,6 +306,71 @@ role. State-changing requests must send the `koe_csrf` cookie value back in the
 | `GET` | `/api/v1/admin/users` | session cookie (`admin`) | Paginated users. Query `page` (default 1), `pageSize` (default 20, max 100), `role`, `status`, `search` (name/email substring). Returns `{ users, total, page, pageSize }`. |
 | `PATCH` | `/api/v1/admin/users/:id` | session cookie (`admin`) + CSRF | Body `{ role?, status? }` (at least one required). Changes a user's role and/or status. Status `banned`/`suspended` writes a `ban`/`suspend` audit record; `active` reactivates. Returns the updated `User`. |
 | `GET` | `/api/v1/admin/settings` | session cookie (`admin`) | Read-only effective configuration the SPA renders on the Settings page. |
+
+## Extensibility
+
+### Event bus
+
+Domain services emit a fixed catalog of **Domain Events** on an in-process bus.
+An event is an envelope `{ id, type, occurredAt, data }`, where `data` carries
+the entity that changed (for example `{ comment }`, `{ vote }`, `{ report }`).
+
+| `type` | Emitted when |
+| --- | --- |
+| `comment.created` | A `Comment` is inserted (pending or published). |
+| `comment.updated` | A `Comment` is marked as spam by moderation. |
+| `comment.approved` | A `Comment` is approved and published. |
+| `comment.rejected` | A `Comment` is rejected. |
+| `comment.deleted` | A `Comment` is deleted. |
+| `report.created` | A `Report` is opened. |
+| `report.resolved` | A `Report` is resolved by a moderation action. |
+| `user.banned` | A `User` is banned. |
+| `user.suspended` | A `User` is suspended. |
+| `thread.closed` | A `Thread` is closed (reserved; not yet emitted). |
+| `thread.locked` | A `Thread` is locked (reserved; not yet emitted). |
+| `vote.created` | A `Vote` is cast or changed. |
+| `reaction.created` | A `Reaction` is added to a comment or thread. |
+
+### Webhooks
+
+Set `WEBHOOK_SUBSCRIPTIONS` to a JSON array to POST every matching event to an
+outbound URL:
+
+```json
+[
+  {
+    "url": "https://example.com/koe-hooks",
+    "secret": "a-long-random-signing-secret",
+    "events": ["comment.created", "report.created"],
+    "active": true
+  }
+]
+```
+
+Each delivery is a `POST application/json` carrying the event envelope, with:
+
+| Header | Meaning |
+| --- | --- |
+| `x-koe-event` | The event `type` (e.g. `comment.created`). |
+| `x-koe-delivery` | The event `id`. |
+| `x-koe-signature` | `sha256=<hex>` — HMAC-SHA256 of the raw request body using the subscription's `secret`. |
+
+Verify by recomputing the HMAC over the raw body (not a re-serialised object)
+and comparing in constant time:
+
+```ts
+import { createHmac, timingSafeEqual } from "node:crypto";
+
+const expected = createHmac("sha256", secret).update(rawBody).digest("hex");
+const received = (headers["x-koe-signature"] ?? "").replace(/^sha256=/, "");
+const valid =
+  received.length === expected.length &&
+  timingSafeEqual(Buffer.from(received), Buffer.from(expected));
+```
+
+Deliveries are fire-and-forget: they never block or fail the originating API
+request, a non-2xx response is logged, and subscriptions only receive the events
+they name (and only while `active`).
 
 ## SDK
 
@@ -571,19 +641,6 @@ lands, update it as follows.
 - **Web component:** document that in-progress drafts are persisted to
   `localStorage`, keyed by thread and parent comment, and cleared on successful
   submit. Note any new storage keys alongside `koe_access_token`.
-
-### 19 — Extensibility: Event Bus & Webhooks
-
-- **New "Extensibility" section:** list the event catalog (`comment.created`,
-  `comment.updated`, `comment.deleted`, `comment.approved`, `comment.rejected`,
-  `report.created`, `report.resolved`, `user.banned`, `user.suspended`,
-  `thread.closed`, `thread.locked`, `vote.created`, `reaction.created`), the
-  webhook subscription configuration, and how receivers verify the HMAC-SHA256
-  signature.
-- **Configuration:** add webhook subscription/secret env vars.
-- **Monorepo layout:** add the `@koe/moderation` package (or wherever the bus
-  and webhook dispatcher live) if created.
-- **Features:** add a bullet for signed outbound webhooks.
 
 ### Also worth noting when editing
 - When a `report`/`events` README change introduces a new **domain term**,

@@ -2,7 +2,9 @@ import {
   AdminUpdateUserBodySchema,
   AdminUserListQuerySchema,
   AdminUserListResponseSchema,
+  EventBus,
   IdParamSchema,
+  USER_MODERATION_EVENT,
   UserStatus,
   UserSchema,
 } from "@koe/core";
@@ -12,6 +14,7 @@ import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
 export interface AdminUsersRoutesOptions {
   db: Database;
+  events: EventBus;
 }
 
 function statusAuditVerb(status: UserStatus): "ban" | "suspend" | null {
@@ -28,7 +31,7 @@ export function createAdminUsersHandlers(
   app: FastifyInstance,
   options: AdminUsersRoutesOptions
 ) {
-  const { db } = options;
+  const { db, events } = options;
 
   // Admin: paginated users list
   // GET /api/v1/admin/users
@@ -169,7 +172,12 @@ export function createAdminUsersHandlers(
       return user;
     });
 
-    return reply.status(200).send(UserSchema.parse(updatedUser));
+    const user = UserSchema.parse(updatedUser);
+    if (auditVerb) {
+      events.emit(USER_MODERATION_EVENT[auditVerb], { user });
+    }
+
+    return reply.status(200).send(user);
   };
 
   return { listUsersHandler, updateUserHandler };

@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+export * from "./events.js";
+
 // Roles & Statuses
 export const UserRoleSchema = z.enum(["guest", "member", "moderator", "admin"]);
 export type UserRole = z.infer<typeof UserRoleSchema>;

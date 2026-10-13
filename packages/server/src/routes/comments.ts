@@ -4,6 +4,7 @@ import {
   CommentSchema,
   CreateCommentBodySchema,
   CreateCommentParamsSchema,
+  EventBus,
 } from "@koe/core";
 import { comments, Database, reactions, threads, users, votes } from "@koe/db";
 import { renderMarkdown } from "@koe/renderer";
@@ -19,13 +20,14 @@ import {
 export interface CommentsRoutesOptions {
   db: Database;
   rateLimits?: RateLimitConfig;
+  events: EventBus;
 }
 
 export default async function commentsRoutes(
   app: FastifyInstance,
   options: CommentsRoutesOptions
 ) {
-  const { db } = options;
+  const { db, events } = options;
   const duplicateCommentWindowMs =
     options.rateLimits?.duplicateCommentWindowMs ??
     DEFAULT_DUPLICATE_COMMENT_WINDOW_MS;
@@ -155,9 +157,10 @@ export default async function commentsRoutes(
       return comment;
     });
 
-    return reply
-      .status(201)
-      .send(CommentSchema.parse(created));
+    const createdComment = CommentSchema.parse(created);
+    events.emit("comment.created", { comment: createdComment });
+
+    return reply.status(201).send(createdComment);
   };
 
   // Comments: list (nested tree, paginated top-level)

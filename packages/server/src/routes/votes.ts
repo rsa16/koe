@@ -1,4 +1,4 @@
-import { CreateVoteBodySchema, VoteSchema, VoteValue } from "@koe/core";
+import { CreateVoteBodySchema, EventBus, VoteSchema, VoteValue } from "@koe/core";
 import { comments, Database, votes } from "@koe/db";
 import { and, eq, sql } from "drizzle-orm";
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
@@ -9,6 +9,7 @@ import { withUniqueViolationRetry } from "../unique.js";
 export interface VotesRoutesOptions {
   db: Database;
   rateLimits?: RateLimitConfig;
+  events: EventBus;
 }
 
 type VoteResult =
@@ -32,7 +33,7 @@ export default async function votesRoutes(
   app: FastifyInstance,
   options: VotesRoutesOptions
 ) {
-  const { db } = options;
+  const { db, events } = options;
 
   async function applyVoteDelta(
     tx: Database,
@@ -134,7 +135,10 @@ export default async function votesRoutes(
     if (result.status === 204) {
       return reply.status(204).send();
     }
-    return reply.status(result.status).send(VoteSchema.parse(result.vote));
+
+    const vote = VoteSchema.parse(result.vote);
+    events.emit("vote.created", { vote });
+    return reply.status(result.status).send(vote);
   };
 
   // Votes: remove the current user's vote (idempotent)
