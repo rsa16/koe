@@ -459,3 +459,71 @@ describe("Admin SPA static hosting", () => {
     expect(response.statusCode).toBe(404);
   });
 });
+
+describe("Admin SPA custom base path", () => {
+  let adminDistPath: string;
+  let app: FastifyInstance;
+
+  beforeEach(async () => {
+    adminDistPath = mkdtempSync(path.join(os.tmpdir(), "koe-admin-base-"));
+    mkdirSync(path.join(adminDistPath, "assets"), { recursive: true });
+    writeFileSync(
+      path.join(adminDistPath, "index.html"),
+      "<!doctype html><html><body><div id=\"root\">admin</div></body></html>"
+    );
+    writeFileSync(path.join(adminDistPath, "assets", "app.js"), "console.log(1)");
+
+    const { db } = await createMemDb();
+    app = buildApp({
+      db,
+      jwtSecret: "test-jwt-secret-at-least-32-chars-long",
+      logger: false,
+      adminDistPath,
+      adminBase: "/comments/admin/",
+    });
+    await app.ready();
+  });
+
+  afterEach(async () => {
+    await app.close();
+    rmSync(adminDistPath, { recursive: true, force: true });
+  });
+
+  it("redirects the base without a trailing slash", async () => {
+    const response = await app.inject({ method: "GET", url: "/comments/admin" });
+    expect(response.statusCode).toBe(302);
+    expect(response.headers.location).toBe("/comments/admin/");
+  });
+
+  it("serves the SPA index under the custom base", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/comments/admin/",
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toContain("id=\"root\"");
+  });
+
+  it("serves built assets under the custom base", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/comments/admin/assets/app.js",
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toContain("console.log");
+  });
+
+  it("falls back to index.html for client-side routes under the custom base", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/comments/admin/queue",
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toContain("id=\"root\"");
+  });
+
+  it("does not mount the SPA at the default /admin path", async () => {
+    const response = await app.inject({ method: "GET", url: "/admin/" });
+    expect(response.statusCode).toBe(404);
+  });
+});

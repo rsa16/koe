@@ -3,6 +3,7 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
+      "env": ["ADMIN_BASE", "VITE_ADMIN_API_PREFIX"],
       "outputs": ["dist/**", "src/generated/**", "public/widget.js*"]
     },
     "dev": {

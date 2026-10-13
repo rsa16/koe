@@ -10,11 +10,15 @@ const theme = createTheme({
   },
 });
 
+// `BASE_URL` mirrors the Vite `base` (e.g. "/admin/" or "/comments/admin/");
+// React Router wants it without the trailing slash.
+const basename = import.meta.env.BASE_URL.replace(/\/$/, "") || "/";
+
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <BrowserRouter basename="/admin">
+      <BrowserRouter basename={basename}>
         <App />
       </BrowserRouter>
     </ThemeProvider>

@@ -24,6 +24,18 @@ import type {
 const CSRF_COOKIE = "koe_csrf";
 const CSRF_HEADER = "x-csrf-token";
 
+// The API prefix the admin UI talks to. Defaults to Koe's own /api/v1; hosts
+// that namespace the API differently (e.g. otl-site's /api/comments/v1) set
+// VITE_ADMIN_API_PREFIX at build time. Mirrors the SDK's `apiPrefix` (ADR 0004).
+const API_PREFIX = (import.meta.env.VITE_ADMIN_API_PREFIX ?? "/api/v1").replace(
+  /\/$/,
+  ""
+);
+
+function apiPath(path: string): string {
+  return `${API_PREFIX}${path}`;
+}
+
 export class AdminApiError extends Error {
   readonly status: number;
   readonly type: string;
@@ -75,7 +87,7 @@ async function request(path: string, init: RequestInit = {}): Promise<Response> 
 }
 
 export async function login(accessToken: string): Promise<AdminSession> {
-  const response = await request("/api/v1/admin/session", {
+  const response = await request(apiPath("/admin/session"), {
     method: "POST",
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -86,7 +98,7 @@ export async function login(accessToken: string): Promise<AdminSession> {
 }
 
 export async function getSession(): Promise<User> {
-  const response = await request("/api/v1/admin/session");
+  const response = await request(apiPath("/admin/session"));
   if (!response.ok) {
     throw await toError(response);
   }
@@ -95,7 +107,7 @@ export async function getSession(): Promise<User> {
 
 export async function logout(): Promise<void> {
   const csrfToken = readCookie(CSRF_COOKIE);
-  const response = await request("/api/v1/admin/session", {
+  const response = await request(apiPath("/admin/session"), {
     method: "DELETE",
     headers: csrfToken ? { [CSRF_HEADER]: csrfToken } : {},
   });
@@ -105,7 +117,7 @@ export async function logout(): Promise<void> {
 }
 
 export async function fetchQueue(): Promise<ModerationQueueItem[]> {
-  const response = await request("/api/v1/admin/moderation/queue");
+  const response = await request(apiPath("/admin/moderation/queue"));
   if (!response.ok) {
     throw await toError(response);
   }
@@ -118,7 +130,7 @@ export async function moderate(
 ): Promise<Comment> {
   const parsedAction = CommentModerationActionVerbSchema.parse(action);
   const csrfToken = readCookie(CSRF_COOKIE);
-  const response = await request("/api/v1/admin/moderation/actions", {
+  const response = await request(apiPath("/admin/moderation/actions"), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -145,7 +157,7 @@ export async function fetchUsers(
   }
   const suffix = query.toString();
   const response = await request(
-    `/api/v1/admin/users${suffix ? `?${suffix}` : ""}`
+    apiPath(`/admin/users${suffix ? `?${suffix}` : ""}`)
   );
   if (!response.ok) {
     throw await toError(response);
@@ -159,7 +171,7 @@ export async function updateUser(
 ): Promise<User> {
   const parsed = AdminUpdateUserBodySchema.parse(update);
   const csrfToken = readCookie(CSRF_COOKIE);
-  const response = await request(`/api/v1/admin/users/${userId}`, {
+  const response = await request(apiPath(`/admin/users/${userId}`), {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
@@ -174,7 +186,7 @@ export async function updateUser(
 }
 
 export async function fetchSettings(): Promise<AdminSettings> {
-  const response = await request("/api/v1/admin/settings");
+  const response = await request(apiPath("/admin/settings"));
   if (!response.ok) {
     throw await toError(response);
   }

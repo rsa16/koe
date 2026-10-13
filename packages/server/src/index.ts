@@ -82,6 +82,7 @@ const app = buildApp({
   reactionAllowlist,
   rateLimits,
   adminDistPath,
+  adminBase: process.env.ADMIN_BASE,
   logger: true,
 });
 

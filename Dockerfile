@@ -22,13 +22,25 @@ RUN npm ci
 COPY packages ./packages
 COPY apps/admin ./apps/admin
 
+# The admin SPA's base path and API prefix are baked in at build time. The
+# defaults match a standalone Koe; hosts that mount the UI elsewhere (e.g.
+# otl-site serves it at /comments/admin/ against /api/comments/v1) override
+# these as build args. Scoped to the build command so no other package's build
+# sees the admin-only variable. ADMIN_BASE is also read at runtime by the server.
+ARG ADMIN_BASE=/admin/
+ARG VITE_ADMIN_API_PREFIX=/api/v1
+
 # Build all packages via Turborepo
-RUN npm run build
+RUN ADMIN_BASE="${ADMIN_BASE}" VITE_ADMIN_API_PREFIX="${VITE_ADMIN_API_PREFIX}" npm run build
 
 # ---- Runtime Stage ----
 FROM node:22-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
+
+# Where the server mounts the admin SPA. Overridable per deployment.
+ARG ADMIN_BASE=/admin/
+ENV ADMIN_BASE=${ADMIN_BASE}
 
 # Copy built node_modules, root files, and built packages (including drizzle migrations)
 COPY --from=build /app/node_modules ./node_modules

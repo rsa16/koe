@@ -38,12 +38,22 @@ export interface BuildAppOptions {
   preModerationDefault?: boolean;
   sessionSecret?: string;
   adminDistPath?: string;
+  adminBase?: string;
   rateLimits?: RateLimitConfig;
+}
+
+const DEFAULT_ADMIN_BASE = "/admin/";
+
+/** Normalises a configured base into a leading/trailing-slashed path. */
+function normalizeAdminBase(base: string): string {
+  const segment = base.trim().replace(/^\/+|\/+$/g, "");
+  return segment ? `/${segment}/` : "/";
 }
 
 export function registerAdminSpa(
   app: FastifyInstance,
-  adminDistPath?: string
+  adminDistPath?: string,
+  adminBase: string = DEFAULT_ADMIN_BASE
 ): void {
   if (!adminDistPath) {
     return;
@@ -54,24 +64,28 @@ export function registerAdminSpa(
     return;
   }
 
+  const base = normalizeAdminBase(adminBase);
+  const baseWithoutSlash = base.replace(/\/$/, "");
   const indexHtml = readFileSync(indexHtmlPath);
 
   app.register(async (adminScope) => {
     adminScope.register(fastifyStatic, {
       root: adminDistPath,
-      prefix: "/admin/",
+      prefix: base,
       decorateReply: false,
     });
 
     adminScope.setNotFoundHandler((request, reply) => {
-      if (request.url === "/admin" || request.url.startsWith("/admin/")) {
+      if (request.url === baseWithoutSlash || request.url.startsWith(base)) {
         return reply.type("text/html; charset=utf-8").send(indexHtml);
       }
       return reply.callNotFound();
     });
   });
 
-  app.get("/admin", (_request, reply) => reply.redirect("/admin/"));
+  if (baseWithoutSlash) {
+    app.get(baseWithoutSlash, (_request, reply) => reply.redirect(base));
+  }
 }
 
 export function buildApp(options: BuildAppOptions): FastifyInstance {
@@ -139,7 +153,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     discordOAuthEnabled: Boolean(discordOAuth),
   });
 
-  registerAdminSpa(app, options.adminDistPath);
+  registerAdminSpa(app, options.adminDistPath, options.adminBase);
 
   return app;
 }

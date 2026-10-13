@@ -15,7 +15,7 @@ Self-hosted headless commenting backend (Fastify + Drizzle ORM + PostgreSQL) wit
 - `packages/db`: Drizzle ORM schema, migration SQL (`drizzle/`), migration runner (`src/migrate.ts`), and PGlite in-memory test DB (`src/mem.ts`).
 - `packages/auth`: Bearer access-token signing/verification and admin session-cookie logic.
 - `packages/server`: Fastify REST API (`/api/v1`). Route registration lives in `src/routes/` (one file per domain group: `health.ts`, `auth.ts`, `threads.ts`); new endpoints for tickets 04–19 go there. Shared plumbing lives in `src/plugins/` — `problem-details.ts` decorates `app.sendProblem` (RFC 9457), `authenticate.ts` decorates `app.authenticate` (bearer preHandler), `admin-session.ts` decorates `app.adminAuthenticate`/`app.requireAdminRole`/`app.requireAdminCsrf` (session cookie + CSRF for the admin API). OAuth helpers in `src/oauth.ts`, `src/user-accounts.ts`, `src/oauth-render.ts`.
-- `apps/admin`: React + Vite + Material UI admin SPA (Moderation Queue), built to `dist/` and served by `@koe/server` at `/admin`.
+- `apps/admin`: React + Vite + Material UI admin SPA (Moderation Queue), built to `dist/` and served by `@koe/server` at `/admin` by default (mount path and API prefix are configurable — `ADMIN_BASE`, `VITE_ADMIN_API_PREFIX`; ADR 0005).
 - `apps/demo`: Self-contained PGlite + server demo with the bundled widget and SDK walkthrough.
 
 ## Development & Testing Commands
