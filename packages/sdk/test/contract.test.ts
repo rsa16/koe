@@ -137,7 +137,7 @@ describe("Koe SDK Contract Tests", () => {
   it("auth.anonymous posts to the anonymous endpoint and parses the response", async () => {
     const { fetchFn, calls } = mockFetch(() => ({
       status: 200,
-      body: { accessToken: "access-token", user: guestUser },
+      body: { accessToken: "access-token", refreshToken: "refresh-token", user: guestUser },
     }));
     const client = createKoeClient({ baseUrl: "http://localhost:3000", fetch: fetchFn });
 
@@ -151,10 +151,36 @@ describe("Koe SDK Contract Tests", () => {
     expect(result.user.createdAt).toBeInstanceOf(Date);
   });
 
+  it("auth.refresh posts the refresh token and parses the rotated pair", async () => {
+    const { fetchFn, calls } = mockFetch(() => ({
+      status: 200,
+      body: {
+        accessToken: "new-access",
+        refreshToken: "new-refresh",
+        user: guestUser,
+      },
+    }));
+    const client = createKoeClient({
+      baseUrl: "http://localhost:3000",
+      fetch: fetchFn,
+    });
+
+    const result = await client.auth.refresh("old-refresh");
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toBe("http://localhost:3000/api/v1/auth/refresh");
+    expect(calls[0].init.method).toBe("POST");
+    expect(JSON.parse(String(calls[0].init.body))).toEqual({
+      refreshToken: "old-refresh",
+    });
+    expect(result.accessToken).toBe("new-access");
+    expect(result.refreshToken).toBe("new-refresh");
+  });
+
   it("composes request URLs from a non-default apiPrefix", async () => {
     const { fetchFn, calls } = mockFetch(() => ({
       status: 200,
-      body: { accessToken: "access-token", user: guestUser },
+      body: { accessToken: "access-token", refreshToken: "refresh-token", user: guestUser },
     }));
     const client = createKoeClient({
       baseUrl: "http://localhost:3000",
@@ -187,7 +213,7 @@ describe("Koe SDK Contract Tests", () => {
   it("falls back to the default prefix when apiPrefix is blank", async () => {
     const { fetchFn, calls } = mockFetch(() => ({
       status: 200,
-      body: { accessToken: "access-token", user: guestUser },
+      body: { accessToken: "access-token", refreshToken: "refresh-token", user: guestUser },
     }));
     const client = createKoeClient({
       baseUrl: "http://localhost:3000",

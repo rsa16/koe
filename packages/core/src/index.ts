@@ -380,11 +380,23 @@ export type ModerationActionListResponse = z.infer<
 >;
 
 // Auth schemas
-export const AnonymousAuthResponseSchema = z.object({
+// An access/refresh token pair plus the identity it belongs to. Returned by
+// guest login, OAuth login, and refresh — hence the neutral name.
+export const AuthTokenResponseSchema = z.object({
   accessToken: z.string(),
+  refreshToken: z.string().min(1),
   user: UserSchema,
 });
-export type AnonymousAuthResponse = z.infer<typeof AnonymousAuthResponseSchema>;
+export type AuthTokenResponse = z.infer<typeof AuthTokenResponseSchema>;
+
+export const AnonymousAuthResponseSchema = AuthTokenResponseSchema;
+export type AnonymousAuthResponse = AuthTokenResponse;
+
+// Rotates an (opaque) refresh token for a fresh access/refresh pair.
+export const RefreshTokenBodySchema = z.object({
+  refreshToken: z.string().min(1),
+});
+export type RefreshTokenBody = z.infer<typeof RefreshTokenBodySchema>;
 
 export const OAuthStartQuerySchema = z.object({
   guestUserId: z.string().uuid().optional(),
@@ -397,8 +409,8 @@ export const OAuthCallbackQuerySchema = z.object({
 });
 export type OAuthCallbackQuery = z.infer<typeof OAuthCallbackQuerySchema>;
 
-export const OAuthCallbackResponseSchema = AnonymousAuthResponseSchema;
-export type OAuthCallbackResponse = AnonymousAuthResponse;
+export const OAuthCallbackResponseSchema = AuthTokenResponseSchema;
+export type OAuthCallbackResponse = AuthTokenResponse;
 
 // Admin UI session schemas
 export const AdminSessionSchema = z.object({
@@ -427,6 +439,7 @@ export const SessionSchema = z.object({
   id: z.string().uuid(),
   userId: z.string().uuid(),
   refreshTokenHash: z.string().nullable(),
+  previousRefreshTokenHash: z.string().nullable(),
   expiresAt: z.coerce.date(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),

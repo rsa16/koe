@@ -225,4 +225,134 @@ describe("Auth API Seam Integration Tests", () => {
       expect(response.statusCode).toBe(400);
     });
   });
+
+  describe("POST /api/v1/auth/refresh", () => {
+    async function anonSession(): Promise<{
+      accessToken: string;
+      refreshToken: string;
+      userId: string;
+    }> {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/v1/auth/anonymous",
+      });
+      const body = response.json();
+      return {
+        accessToken: body.accessToken,
+        refreshToken: body.refreshToken,
+        userId: body.user.id,
+      };
+    }
+
+    function refresh(refreshToken: string) {
+      return app.inject({
+        method: "POST",
+        url: "/api/v1/auth/refresh",
+        payload: { refreshToken },
+      });
+    }
+
+    it("issues a refresh token alongside the access token on login", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/v1/auth/anonymous",
+      });
+
+      const body = response.json();
+      expect(typeof body.refreshToken).toBe("string");
+      expect(body.refreshToken.length).toBeGreaterThan(0);
+      expect(body.refreshToken).not.toBe(body.accessToken);
+    });
+
+    it("exchanges a valid refresh token for a fresh pair", async () => {
+      const first = await anonSession();
+
+      const response = await refresh(first.refreshToken);
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(typeof body.accessToken).toBe("string");
+      expect(typeof body.refreshToken).toBe("string");
+      expect(body.refreshToken).not.toBe(first.refreshToken);
+      expect(body.user.id).toBe(first.userId);
+
+      const meRes = await app.inject({
+        method: "GET",
+        url: "/api/v1/auth/me",
+        headers: { authorization: `Bearer ${body.accessToken}` },
+      });
+      expect(meRes.statusCode).toBe(200);
+      expect(meRes.json().id).toBe(first.userId);
+    });
+
+    it("rotates on use so the presented token is no longer accepted", async () => {
+      const first = await anonSession();
+      const rotated = await refresh(first.refreshToken);
+      const nextRefreshToken = rotated.json().refreshToken;
+
+      const replay = await refresh(first.refreshToken);
+
+      expect(replay.statusCode).toBe(401);
+      expect(replay.headers["content-type"]).toContain(
+        "application/problem+json"
+      );
+      expect(replay.json().title).toBe("Unauthorized");
+
+      // Reuse revokes the whole session: the token issued by the rotation dies too.
+      const afterReuse = await refresh(nextRefreshToken);
+      expect(afterReuse.statusCode).toBe(401);
+    });
+
+    it("rejects an unknown refresh token with 401 Problem Details", async () => {
+      const response = await refresh("not-a-real-refresh-token");
+
+      expect(response.statusCode).toBe(401);
+      expect(response.headers["content-type"]).toContain(
+        "application/problem+json"
+      );
+    });
+
+    it("rejects a missing refresh token with a 400 Problem Details", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/v1/auth/refresh",
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.headers["content-type"]).toContain(
+        "application/problem+json"
+      );
+    });
+
+    it("rejects a refresh token whose session has expired", async () => {
+      const { db } = await createMemDb();
+      const expiringApp = buildApp({
+        db,
+        jwtSecret,
+        logger: false,
+        refreshTokenMaxAgeSeconds: -1,
+      });
+      await expiringApp.ready();
+
+      const anon = await expiringApp.inject({
+        method: "POST",
+        url: "/api/v1/auth/anonymous",
+      });
+      const { refreshToken } = anon.json();
+
+      const response = await expiringApp.inject({
+        method: "POST",
+        url: "/api/v1/auth/refresh",
+        payload: { refreshToken },
+      });
+
+      await expiringApp.close();
+
+      expect(response.statusCode).toBe(401);
+      expect(response.headers["content-type"]).toContain(
+        "application/problem+json"
+      );
+    });
+  });
 });

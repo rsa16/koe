@@ -1,6 +1,6 @@
 import {
-  AnonymousAuthResponse,
-  AnonymousAuthResponseSchema,
+  AuthTokenResponse,
+  AuthTokenResponseSchema,
   Comment,
   CommentListQuery,
   CommentListResponse,
@@ -35,6 +35,7 @@ import { ZodTypeAny, z } from "zod";
 
 export type {
   AnonymousAuthResponse,
+  AuthTokenResponse,
   Comment,
   CommentListQuery,
   CommentListResponse,
@@ -120,7 +121,8 @@ function normalizeApiPrefix(apiPrefix: string | undefined): string {
 
 export interface KoeClient {
   auth: {
-    anonymous(): Promise<AnonymousAuthResponse>;
+    anonymous(): Promise<AuthTokenResponse>;
+    refresh(refreshToken: string): Promise<AuthTokenResponse>;
     me(token?: string): Promise<User>;
     updateMe(body: UpdateProfileBody, token?: string): Promise<User>;
   };
@@ -283,8 +285,13 @@ export function createKoeClient(options: KoeClientOptions): KoeClient {
   return {
     auth: {
       anonymous: () =>
-        request(AnonymousAuthResponseSchema, "/auth/anonymous", {
+        request(AuthTokenResponseSchema, "/auth/anonymous", {
           method: "POST",
+        }),
+      refresh: (refreshToken) =>
+        request(AuthTokenResponseSchema, "/auth/refresh", {
+          method: "POST",
+          body: { refreshToken },
         }),
       me: (token) =>
         request(UserSchema, "/auth/me", { method: "GET", token }),

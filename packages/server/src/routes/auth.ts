@@ -1,20 +1,25 @@
 import {
   DEFAULT_OAUTH_STATE_MAX_AGE_SECONDS,
+  generateRefreshToken,
+  hashRefreshToken,
+  refreshTokenExpiresAt,
   signAccessToken,
   signOAuthState,
   verifyOAuthState,
 } from "@koe/auth";
 import {
-  AnonymousAuthResponseSchema,
+  AuthTokenResponseSchema,
   IdentityProvider,
   OAuthCallbackQuerySchema,
   OAuthCallbackResponseSchema,
   OAuthStartQuerySchema,
+  RefreshTokenBodySchema,
+  Session,
   UpdateProfileBodySchema,
   User,
   UserSchema,
 } from "@koe/core";
-import { Database, identities, users } from "@koe/db";
+import { Database, identities, sessions, users } from "@koe/db";
 import { eq } from "drizzle-orm";
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import crypto from "node:crypto";
@@ -38,6 +43,8 @@ export interface AuthRoutesOptions {
   clientOrigin: string;
   googleOAuth?: GoogleOAuthProvider;
   discordOAuth?: DiscordOAuthProvider;
+  /** Refresh-token lifetime; overridable mainly so tests can force expiry. */
+  refreshTokenMaxAgeSeconds?: number;
 }
 
 interface OAuthProviderRoutes {
@@ -54,7 +61,14 @@ export default async function authRoutes(
   app: FastifyInstance,
   options: AuthRoutesOptions
 ) {
-  const { db, jwtSecret, clientOrigin, googleOAuth, discordOAuth } = options;
+  const {
+    db,
+    jwtSecret,
+    clientOrigin,
+    googleOAuth,
+    discordOAuth,
+    refreshTokenMaxAgeSeconds,
+  } = options;
 
   const oauthStateCookieAttributes = {
     httpOnly: true,
@@ -63,6 +77,53 @@ export default async function authRoutes(
     secure: process.env.NODE_ENV === "production",
     maxAge: DEFAULT_OAUTH_STATE_MAX_AGE_SECONDS,
   };
+
+  async function issueAccessToken(user: User): Promise<string> {
+    return signAccessToken(
+      { userId: user.id, role: user.role },
+      { secret: jwtSecret, expiresIn: "15m" }
+    );
+  }
+
+  /** Mints and persists a new refresh token for a user, returning the plaintext once. */
+  async function issueRefreshToken(userId: string): Promise<string> {
+    const refreshToken = generateRefreshToken();
+    await db.insert(sessions).values({
+      userId,
+      refreshTokenHash: hashRefreshToken(refreshToken),
+      expiresAt: refreshTokenExpiresAt(refreshTokenMaxAgeSeconds),
+    });
+    return refreshToken;
+  }
+
+  /**
+   * Replaces a session's refresh token, remembering the spent hash. A later
+   * presentation of that spent hash is treated as reuse (the token leaked) and
+   * revokes the session.
+   */
+  async function rotateRefreshToken(session: Session): Promise<string> {
+    const refreshToken = generateRefreshToken();
+    await db
+      .update(sessions)
+      .set({
+        refreshTokenHash: hashRefreshToken(refreshToken),
+        previousRefreshTokenHash: session.refreshTokenHash,
+        expiresAt: refreshTokenExpiresAt(refreshTokenMaxAgeSeconds),
+        updatedAt: new Date(),
+      })
+      .where(eq(sessions.id, session.id));
+    return refreshToken;
+  }
+
+  /** Mints a short-lived access token plus a persisted, opaque refresh token. */
+  async function issueTokens(
+    user: User
+  ): Promise<{ accessToken: string; refreshToken: string }> {
+    return {
+      accessToken: await issueAccessToken(user),
+      refreshToken: await issueRefreshToken(user.id),
+    };
+  }
 
   // Auth: Anonymous guest login
   // POST /api/v1/auth/anonymous
@@ -88,14 +149,88 @@ export default async function authRoutes(
     });
 
     const user = UserSchema.parse(userRow);
-    const accessToken = await signAccessToken(
-      { userId: user.id, role: user.role },
-      { secret: jwtSecret, expiresIn: "15m" }
-    );
+    const { accessToken, refreshToken } = await issueTokens(user);
 
     return reply
       .status(200)
-      .send(AnonymousAuthResponseSchema.parse({ accessToken, user }));
+      .send(
+        AuthTokenResponseSchema.parse({ accessToken, refreshToken, user })
+      );
+  };
+
+  // Auth: Exchange a refresh token for a fresh access/refresh pair
+  // POST /api/v1/auth/refresh
+  const refreshHandler = async (
+    request: FastifyRequest,
+    reply: FastifyReply
+  ) => {
+    const bodyParsed = RefreshTokenBodySchema.safeParse(request.body);
+    if (!bodyParsed.success) {
+      return app.sendProblem(
+        reply,
+        400,
+        "Bad Request",
+        "Invalid refresh token body",
+        request.url,
+        bodyParsed.error.issues
+      );
+    }
+
+    const unauthorized = () =>
+      app.sendProblem(
+        reply,
+        401,
+        "Unauthorized",
+        "Invalid or expired refresh token",
+        request.url
+      );
+
+    const presentedHash = hashRefreshToken(bodyParsed.data.refreshToken);
+    const [session] = await db
+      .select()
+      .from(sessions)
+      .where(eq(sessions.refreshTokenHash, presentedHash))
+      .limit(1);
+
+    if (!session) {
+      // A spent token being presented proves it leaked, so revoke the session
+      // rather than merely rejecting the request.
+      const [reused] = await db
+        .select()
+        .from(sessions)
+        .where(eq(sessions.previousRefreshTokenHash, presentedHash))
+        .limit(1);
+      if (reused) {
+        await db.delete(sessions).where(eq(sessions.id, reused.id));
+      }
+      return unauthorized();
+    }
+
+    if (session.expiresAt.getTime() <= Date.now()) {
+      await db.delete(sessions).where(eq(sessions.id, session.id));
+      return unauthorized();
+    }
+
+    const [userRow] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, session.userId))
+      .limit(1);
+
+    if (!userRow) {
+      await db.delete(sessions).where(eq(sessions.id, session.id));
+      return unauthorized();
+    }
+
+    const user = UserSchema.parse(userRow);
+    const refreshToken = await rotateRefreshToken(session);
+    const accessToken = await issueAccessToken(user);
+
+    return reply
+      .status(200)
+      .send(
+        AuthTokenResponseSchema.parse({ accessToken, refreshToken, user })
+      );
   };
 
   // Auth: Current user profile
@@ -258,13 +393,8 @@ export default async function authRoutes(
       }
 
       let user: User;
-      let accessToken: string;
       try {
         user = await resolveOAuthUser(db, provider, profile, oauthState.guestUserId);
-        accessToken = await signAccessToken(
-          { userId: user.id, role: user.role },
-          { secret: jwtSecret, expiresIn: "15m" }
-        );
       } catch {
         clearStateCookie();
         return sendOAuthErrorPage(
@@ -274,8 +404,14 @@ export default async function authRoutes(
         );
       }
 
+      const { accessToken, refreshToken } = await issueTokens(user);
+
       clearStateCookie();
-      const payload = OAuthCallbackResponseSchema.parse({ accessToken, user });
+      const payload = OAuthCallbackResponseSchema.parse({
+        accessToken,
+        refreshToken,
+        user,
+      });
       return reply
         .type("text/html")
         .send(renderOAuthSuccessPage(payload, clientOrigin));
@@ -286,6 +422,7 @@ export default async function authRoutes(
   }
 
   app.post("/api/v1/auth/anonymous", anonymousHandler);
+  app.post("/api/v1/auth/refresh", refreshHandler);
   app.get("/api/v1/auth/me", { preHandler: app.authenticate }, meHandler);
   app.patch(
     "/api/v1/auth/me",

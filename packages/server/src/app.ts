@@ -55,6 +55,7 @@ export interface BuildAppOptions {
   webhookSubscriptions?: WebhookSubscription[];
   webhookTimeoutMs?: number;
   fetchImpl?: FetchLike;
+  refreshTokenMaxAgeSeconds?: number;
 }
 
 const DEFAULT_ADMIN_BASE = "/admin/";
@@ -164,6 +165,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     clientOrigin,
     googleOAuth,
     discordOAuth,
+    refreshTokenMaxAgeSeconds: options.refreshTokenMaxAgeSeconds,
   });
   app.register(threadsRoutes, {
     db: options.db,
