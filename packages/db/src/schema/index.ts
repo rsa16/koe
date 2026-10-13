@@ -8,8 +8,9 @@ export const threadStatusEnum = pgEnum("thread_status", ["open", "closed", "lock
 export const commentStatusEnum = pgEnum("comment_status", ["pending", "published", "spam", "deleted"]);
 export const reactionTargetTypeEnum = pgEnum("reaction_target_type", ["comment", "thread"]);
 export const reportStatusEnum = pgEnum("report_status", ["open", "resolved", "dismissed"]);
-export const moderationActionVerbEnum = pgEnum("moderation_action_verb", ["approve", "reject", "delete", "spam", "ban", "suspend"]);
+export const moderationActionVerbEnum = pgEnum("moderation_action_verb", ["approve", "reject", "delete", "spam", "ban", "suspend", "block"]);
 export const moderationTargetTypeEnum = pgEnum("moderation_target_type", ["comment", "user", "thread"]);
+export const networkBlockSourceEnum = pgEnum("network_block_source", ["auto"]);
 
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -171,5 +172,22 @@ export const moderationActions = pgTable(
   (table) => [
     index("idx_moderation_actions_target").on(table.targetType, table.targetId),
     index("idx_moderation_actions_actor_id").on(table.actorId),
+  ]
+);
+
+export const networkBlocks = pgTable(
+  "network_blocks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ip: text("ip").notNull(),
+    reason: text("reason").notNull(),
+    source: networkBlockSourceEnum("source").notNull().default("auto"),
+    createdBy: uuid("created_by").notNull().references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    uniqueIndex("idx_network_blocks_ip").on(table.ip),
+    index("idx_network_blocks_expires_at").on(table.expiresAt),
   ]
 );

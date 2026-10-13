@@ -14,8 +14,9 @@ export async function createMemDb() {
     CREATE TYPE comment_status AS ENUM ('pending', 'published', 'spam', 'deleted');
     CREATE TYPE reaction_target_type AS ENUM ('comment', 'thread');
     CREATE TYPE report_status AS ENUM ('open', 'resolved', 'dismissed');
-    CREATE TYPE moderation_action_verb AS ENUM ('approve', 'reject', 'delete', 'spam', 'ban', 'suspend');
+    CREATE TYPE moderation_action_verb AS ENUM ('approve', 'reject', 'delete', 'spam', 'ban', 'suspend', 'block');
     CREATE TYPE moderation_target_type AS ENUM ('comment', 'user', 'thread');
+    CREATE TYPE network_block_source AS ENUM ('auto');
 
     CREATE TABLE users (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -145,6 +146,19 @@ export async function createMemDb() {
 
     CREATE INDEX idx_moderation_actions_target ON moderation_actions (target_type, target_id);
     CREATE INDEX idx_moderation_actions_actor_id ON moderation_actions (actor_id);
+
+    CREATE TABLE network_blocks (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      ip TEXT NOT NULL,
+      reason TEXT NOT NULL,
+      source network_block_source NOT NULL DEFAULT 'auto',
+      created_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      expires_at TIMESTAMPTZ NOT NULL,
+      UNIQUE (ip)
+    );
+
+    CREATE INDEX idx_network_blocks_expires_at ON network_blocks (expires_at);
   `);
 
   const db = drizzle(client, { schema });

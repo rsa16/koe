@@ -11,6 +11,7 @@ import {
 import { Database, moderationActions, users } from "@koe/db";
 import { and, desc, eq, ilike, or, sql, type SQL } from "drizzle-orm";
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { createNetworkBlocksForBan } from "../network-blocks.js";
 
 export interface AdminUsersRoutesOptions {
   db: Database;
@@ -169,12 +170,23 @@ export function createAdminUsersHandlers(
         });
       }
 
-      return user;
+      const blocks =
+        auditVerb === "ban"
+          ? await createNetworkBlocksForBan(tx, {
+              userId: id,
+              actorId: request.user!.id,
+            })
+          : [];
+
+      return { updated: user, blocks };
     });
 
-    const user = UserSchema.parse(updatedUser);
+    const user = UserSchema.parse(updatedUser.updated);
     if (auditVerb) {
       events.emit(USER_MODERATION_EVENT[auditVerb], { user });
+    }
+    for (const block of updatedUser.blocks) {
+      events.emit("user.network_blocked", { block });
     }
 
     return reply.status(200).send(user);

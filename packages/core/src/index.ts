@@ -294,6 +294,7 @@ export type ModerationTargetType = z.infer<typeof ModerationTargetTypeSchema>;
 
 const COMMENT_MODERATION_ACTIONS = ["approve", "reject", "delete", "spam"] as const;
 const USER_MODERATION_ACTIONS = ["ban", "suspend"] as const;
+const NETWORK_MODERATION_ACTIONS = ["block"] as const;
 
 export const CommentModerationActionVerbSchema = z.enum(
   COMMENT_MODERATION_ACTIONS
@@ -310,6 +311,7 @@ export type UserModerationActionVerb = z.infer<
 export const ModerationActionVerbSchema = z.enum([
   ...COMMENT_MODERATION_ACTIONS,
   ...USER_MODERATION_ACTIONS,
+  ...NETWORK_MODERATION_ACTIONS,
 ]);
 export type ModerationActionVerb = z.infer<typeof ModerationActionVerbSchema>;
 
@@ -378,6 +380,21 @@ export const ModerationActionListResponseSchema = z.object({
 export type ModerationActionListResponse = z.infer<
   typeof ModerationActionListResponseSchema
 >;
+
+// Network Block schemas
+export const NetworkBlockSourceSchema = z.enum(["auto"]);
+export type NetworkBlockSource = z.infer<typeof NetworkBlockSourceSchema>;
+
+export const NetworkBlockSchema = z.object({
+  id: z.string().uuid(),
+  ip: z.string().min(1),
+  reason: z.string(),
+  source: NetworkBlockSourceSchema,
+  createdBy: z.string().uuid(),
+  createdAt: z.coerce.date(),
+  expiresAt: z.coerce.date(),
+});
+export type NetworkBlock = z.infer<typeof NetworkBlockSchema>;
 
 // Admin comments console: a filterable, paginated view over every comment,
 // not just the pending/reported queue.

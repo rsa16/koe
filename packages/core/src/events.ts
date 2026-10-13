@@ -14,6 +14,7 @@ export const EVENT_NAMES = [
   "report.resolved",
   "user.banned",
   "user.suspended",
+  "user.network_blocked",
   "thread.closed",
   "thread.locked",
   "vote.created",

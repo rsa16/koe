@@ -22,6 +22,7 @@ import {
 } from "@koe/db";
 import { and, desc, eq, inArray, or } from "drizzle-orm";
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { createNetworkBlocksForBan } from "../network-blocks.js";
 
 export interface ModerationRoutesOptions {
   db: Database;
@@ -172,7 +173,7 @@ export function createModerationHandlers(
 
       const status = action === "ban" ? "banned" : "suspended";
 
-      const updated = await db.transaction(async (tx: Database) => {
+      const { updated, blocks } = await db.transaction(async (tx: Database) => {
         const [user] = await tx
           .update(users)
           .set({ status, updatedAt: new Date() })
@@ -187,11 +188,22 @@ export function createModerationHandlers(
           metadata: { previousStatus: found[0].status },
         });
 
-        return user;
+        const blocks =
+          action === "ban"
+            ? await createNetworkBlocksForBan(tx, {
+                userId,
+                actorId: request.user!.id,
+              })
+            : [];
+
+        return { updated: user, blocks };
       });
 
       const user = UserSchema.parse(updated);
       events.emit(USER_MODERATION_EVENT[action], { user });
+      for (const block of blocks) {
+        events.emit("user.network_blocked", { block });
+      }
       return reply.status(200).send(user);
     }
 
