@@ -7,6 +7,7 @@ import {
   DEFAULT_RATE_LIMIT_WINDOW_MS,
 } from "./plugins/rate-limit.js";
 import { DEFAULT_WEBHOOK_TIMEOUT_MS } from "./events/index.js";
+import { parseTrustProxy } from "./trust-proxy.js";
 import dotenv from "dotenv";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -97,6 +98,10 @@ const app = buildApp({
   db,
   jwtSecret,
   sessionSecret: process.env.SESSION_SECRET,
+  trustProxy: parseTrustProxy(process.env.TRUST_PROXY, {
+    allowUnbounded:
+      process.env.TRUST_PROXY_ALLOW_UNBOUNDED?.trim().toLowerCase() === "true",
+  }),
   googleOAuth,
   discordOAuth,
   clientOrigin: process.env.CLIENT_ORIGIN,

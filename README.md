@@ -187,6 +187,8 @@ through.
 | `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET` / `DISCORD_REDIRECT_URI` | no | Enables Discord OAuth when all three are set. |
 | `CLIENT_ORIGIN` | no | Origin the OAuth callback may `postMessage` back to. Defaults to `*`. |
 | `SESSION_SECRET` | no | Signing secret for admin session cookies. Defaults to `JWT_SECRET`. |
+| `TRUST_PROXY` | no | Trusted reverse proxies used to determine the real client IP. Unset trusts nothing, so `X-Forwarded-For` is ignored and the socket peer is used; this is the safe default. Set to a comma-separated list of proxy addresses or CIDR ranges (e.g. `127.0.0.1,10.0.0.0/8`). A bare hop count is rejected: it cannot validate the immediate peer, so a directly-reachable client could spoof its address. |
+| `TRUST_PROXY_ALLOW_UNBOUNDED` | no | Set to `true` to permit `TRUST_PROXY=true` (or `*`, or a catch-all range), which trusts every proxy. Off by default because it lets clients spoof their address. |
 | `ADMIN_DIST_PATH` | no | Filesystem path to the built admin SPA. Defaults to `apps/admin/dist`. If `index.html` is absent, `/admin` is not served. |
 | `RATE_LIMIT_WINDOW_MS` | no | Window for the comment/vote/reaction rate limits, in milliseconds. Default `60000`. |
 | `RATE_LIMIT_COMMENTS` | no | Max comment requests per window per `User`/IP. Default `10`. |

@@ -23,6 +23,7 @@ import problemDetailsPlugin from "./plugins/problem-details.js";
 import authenticatePlugin from "./plugins/authenticate.js";
 import adminSessionPlugin from "./plugins/admin-session.js";
 import rateLimitPlugin, { RateLimitConfig } from "./plugins/rate-limit.js";
+import { TrustProxyConfig } from "./trust-proxy.js";
 
 import healthRoutes from "./routes/health.js";
 import authRoutes from "./routes/auth.js";
@@ -47,6 +48,7 @@ export interface BuildAppOptions {
   reactionAllowlist?: string[];
   preModerationDefault?: boolean;
   sessionSecret?: string;
+  trustProxy?: TrustProxyConfig;
   adminDistPath?: string;
   adminBase?: string;
   rateLimits?: RateLimitConfig;
@@ -104,6 +106,7 @@ export function registerAdminSpa(
 export function buildApp(options: BuildAppOptions): FastifyInstance {
   const app = Fastify({
     logger: options.logger ?? false,
+    trustProxy: options.trustProxy ?? false,
   });
 
   const jwtSecret = options.jwtSecret;
