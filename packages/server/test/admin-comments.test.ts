@@ -118,6 +118,27 @@ describe("Admin comments console API Seam Integration Tests", () => {
     expect(response.statusCode).toBe(200);
   }
 
+  async function reportComment(commentId: string, token: string) {
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/v1/comments/${commentId}/reports`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { reason: "abuse" },
+    });
+    expect(response.statusCode).toBe(201);
+  }
+
+  async function moderationQueue() {
+    const moderatorToken = await userToken("moderator");
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/v1/moderation/queue",
+      headers: { authorization: `Bearer ${moderatorToken}` },
+    });
+    expect(response.statusCode).toBe(200);
+    return response.json();
+  }
+
   function listComments(
     cookies: SessionCookies,
     query: Record<string, string | number> = {}
@@ -398,6 +419,79 @@ describe("Admin comments console API Seam Integration Tests", () => {
       expect(response.statusCode).toBe(200);
       const spam = await listComments(cookies, { status: "spam" });
       expect(spam.json().total).toBe(1);
+    });
+
+    it("bulk approve skips published comments without an open report", async () => {
+      const cookies = await login();
+      const threadId = await createThread("console-bulk-guard");
+      const authorToken = await anonToken();
+      const comment = await postComment(threadId, authorToken, "already live");
+      await approve(comment.id as string);
+
+      const response = await bulkAction(cookies, {
+        commentIds: [comment.id],
+        action: "approve",
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().updated).toBe(0);
+    });
+
+    it("bulk approve dismisses an open report", async () => {
+      const cookies = await login();
+      const threadId = await createThread("console-bulk-report-approve");
+      const authorToken = await anonToken();
+      const reporterToken = await anonToken();
+      const comment = await postComment(threadId, authorToken, "reported");
+      await approve(comment.id as string);
+      await reportComment(comment.id as string, reporterToken);
+
+      const before = await moderationQueue();
+      expect(
+        before.comments.some(
+          (item: { id: string }) => item.id === comment.id
+        )
+      ).toBe(true);
+
+      const response = await bulkAction(cookies, {
+        commentIds: [comment.id],
+        action: "approve",
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().updated).toBe(1);
+
+      const after = await moderationQueue();
+      expect(
+        after.comments.some(
+          (item: { id: string }) => item.id === comment.id
+        )
+      ).toBe(false);
+    });
+
+    it("bulk delete resolves an open report", async () => {
+      const cookies = await login();
+      const threadId = await createThread("console-bulk-report-delete");
+      const authorToken = await anonToken();
+      const reporterToken = await anonToken();
+      const comment = await postComment(threadId, authorToken, "reported");
+      await approve(comment.id as string);
+      await reportComment(comment.id as string, reporterToken);
+
+      const response = await bulkAction(cookies, {
+        commentIds: [comment.id],
+        action: "delete",
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().updated).toBe(1);
+
+      const after = await moderationQueue();
+      expect(
+        after.comments.some(
+          (item: { id: string }) => item.id === comment.id
+        )
+      ).toBe(false);
     });
 
     it("bulk pins and unpins comments", async () => {

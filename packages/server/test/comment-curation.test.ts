@@ -357,7 +357,7 @@ describe("Comment Curation API Seam Integration Tests", () => {
       expect(response.json().status).toBe("deleted");
     });
 
-    it("records a moderation action when staff delete another author's comment", async () => {
+    it("records a moderation action when a moderator deletes another author's comment", async () => {
       const threadId = await createThread("delete-mod-audit");
       const authorToken = await anonToken();
       const moderatorToken = await userToken("moderator");

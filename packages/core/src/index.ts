@@ -413,13 +413,6 @@ export type AdminCommentListResponse = z.infer<
 
 // Threads that currently hold comments, with a comment count. Powers the
 // console's "filter comments by page" selector.
-export const AdminCommentThreadListQuerySchema = z.object({
-  search: z.string().trim().min(1).optional(),
-});
-export type AdminCommentThreadListQuery = z.infer<
-  typeof AdminCommentThreadListQuerySchema
->;
-
 export const AdminCommentThreadSchema = ThreadContextSchema.extend({
   commentCount: z.number().int().nonnegative(),
 });

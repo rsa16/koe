@@ -833,7 +833,7 @@ describe("<koe-comments> widget", () => {
     const client = createKoeClient({ baseUrl });
     const { accessToken: authorToken } = await client.auth.anonymous();
     const moderatorToken = await roleToken("moderator");
-    const thread = await client.threads.getByRef("widget-staff-delete");
+    const thread = await client.threads.getByRef("widget-moderator-delete");
     const created = await client.comments.create(
       thread.id,
       { bodyMd: "Not the moderator's" },
@@ -843,7 +843,7 @@ describe("<koe-comments> widget", () => {
     localStorage.clear();
 
     const element = mount(
-      "widget-staff-delete",
+      "widget-moderator-delete",
       `token="${moderatorToken}"`
     );
     await waitFor(

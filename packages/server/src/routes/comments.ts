@@ -431,9 +431,10 @@ export default async function commentsRoutes(
 
     const actor = request.user!;
     const isAuthor = found[0].authorId === actor.id;
-    const isStaff = actor.role === "moderator" || actor.role === "admin";
+    const isModeratorOrAdmin =
+      actor.role === "moderator" || actor.role === "admin";
 
-    if (!isAuthor && !isStaff) {
+    if (!isAuthor && !isModeratorOrAdmin) {
       return app.sendProblem(
         reply,
         403,

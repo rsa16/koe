@@ -231,11 +231,8 @@ export async function fetchAdminComments(
   return AdminCommentListResponseSchema.parse(await response.json());
 }
 
-export async function fetchAdminCommentThreads(
-  search?: string
-): Promise<AdminCommentThread[]> {
-  const query = search ? `?search=${encodeURIComponent(search)}` : "";
-  const response = await request(apiPath(`/admin/comments/threads${query}`));
+export async function fetchAdminCommentThreads(): Promise<AdminCommentThread[]> {
+  const response = await request(apiPath("/admin/comments/threads"));
   if (!response.ok) {
     throw await toError(response);
   }

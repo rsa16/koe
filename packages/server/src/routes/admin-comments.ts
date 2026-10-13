@@ -3,20 +3,21 @@ import {
   AdminBulkCommentActionResponseSchema,
   AdminCommentListQuerySchema,
   AdminCommentListResponseSchema,
-  AdminCommentThreadListQuerySchema,
   AdminCommentThreadListResponseSchema,
   CommentModerationActionVerb,
   CommentSchema,
   EventBus,
+  ReportSchema,
 } from "@koe/core";
 import {
   comments,
   Database,
   moderationActions,
+  reports,
   threads,
   users,
 } from "@koe/db";
-import { and, desc, eq, ilike, inArray, or, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, sql, type SQL } from "drizzle-orm";
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import {
   COMMENT_ACTION_EFFECTS,
@@ -128,31 +129,9 @@ export function createAdminCommentsHandlers(
   // Admin: threads that hold comments, for the page filter
   // GET /api/v1/admin/comments/threads
   const listThreadsHandler = async (
-    request: FastifyRequest,
+    _request: FastifyRequest,
     reply: FastifyReply
   ) => {
-    const queryParsed = AdminCommentThreadListQuerySchema.safeParse(
-      request.query
-    );
-    if (!queryParsed.success) {
-      return app.sendProblem(
-        reply,
-        400,
-        "Bad Request",
-        "Invalid thread list query",
-        request.url,
-        queryParsed.error.issues
-      );
-    }
-
-    const { search } = queryParsed.data;
-    const where = search
-      ? or(
-          ilike(threads.externalRef, `%${search}%`),
-          ilike(threads.title, `%${search}%`)
-        )
-      : undefined;
-
     const rows: Array<{
       id: string;
       externalRef: string;
@@ -169,7 +148,6 @@ export function createAdminCommentsHandlers(
       })
       .from(comments)
       .innerJoin(threads, eq(comments.threadId, threads.id))
-      .where(where)
       .groupBy(threads.id, threads.externalRef, threads.title, threads.url)
       .orderBy(desc(sql`count(${comments.id})`), threads.externalRef)
       .limit(100);
@@ -231,18 +209,77 @@ export function createAdminCommentsHandlers(
     const previousStatus = new Map(
       targets.map((target) => [target.id, target.status])
     );
-    const ids = targets.map((target) => target.id);
 
-    const updatedRows: Array<typeof comments.$inferSelect> = await db.transaction(
+    // Approve/reject keep the single-action guard: only pending comments, or
+    // comments with an open report, are eligible. Delete/spam bypass it.
+    let eligible = targets;
+    if (!effect.bypassesTransitionGuard) {
+      const openReports: Array<{ commentId: string }> = await db
+        .select({ commentId: reports.commentId })
+        .from(reports)
+        .where(
+          and(
+            inArray(reports.commentId, commentIds),
+            eq(reports.status, "open")
+          )
+        );
+      const reported = new Set(openReports.map((report) => report.commentId));
+      eligible = targets.filter(
+        (target) => target.status === "pending" || reported.has(target.id)
+      );
+    }
+
+    if (eligible.length === 0) {
+      return reply
+        .status(200)
+        .send(AdminBulkCommentActionResponseSchema.parse({ updated: 0 }));
+    }
+
+    const ids = eligible.map((target) => target.id);
+
+    const { rows, resolvedReports } = await db.transaction(
       async (tx: Database) => {
-        const rows = await tx
+        const openReportIds =
+          effect.reportStatus === "resolved"
+            ? (
+                await tx
+                  .select({ id: reports.id })
+                  .from(reports)
+                  .where(
+                    and(
+                      inArray(reports.commentId, ids),
+                      eq(reports.status, "open")
+                    )
+                  )
+              ).map((report: { id: string }) => report.id)
+            : [];
+
+        const updated: Array<typeof comments.$inferSelect> = await tx
           .update(comments)
           .set({ status: effect.nextStatus, updatedAt: new Date() })
           .where(inArray(comments.id, ids))
           .returning();
 
+        await tx
+          .update(reports)
+          .set({ status: effect.reportStatus, updatedAt: new Date() })
+          .where(
+            and(
+              inArray(reports.commentId, ids),
+              eq(reports.status, "open")
+            )
+          );
+
+        const tapped =
+          openReportIds.length > 0
+            ? await tx
+                .select()
+                .from(reports)
+                .where(inArray(reports.id, openReportIds))
+            : [];
+
         await tx.insert(moderationActions).values(
-          rows.map((row: typeof comments.$inferSelect) => ({
+          updated.map((row) => ({
             actorId: request.user!.id,
             action: verb,
             targetType: "comment" as const,
@@ -251,21 +288,24 @@ export function createAdminCommentsHandlers(
           }))
         );
 
-        return rows;
+        return { rows: updated, resolvedReports: tapped };
       }
     );
 
-    for (const row of updatedRows) {
+    for (const row of rows as Array<typeof comments.$inferSelect>) {
       events.emit(COMMENT_ACTION_EVENTS[verb], {
         comment: CommentSchema.parse(row),
       });
+    }
+    for (const report of resolvedReports as Array<typeof reports.$inferSelect>) {
+      events.emit("report.resolved", { report: ReportSchema.parse(report) });
     }
 
     return reply
       .status(200)
       .send(
         AdminBulkCommentActionResponseSchema.parse({
-          updated: updatedRows.length,
+          updated: rows.length,
         })
       );
   };

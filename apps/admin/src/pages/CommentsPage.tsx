@@ -407,7 +407,7 @@ export default function CommentsPage() {
                   <TableCell>Author</TableCell>
                   <TableCell>Thread</TableCell>
                   <TableCell>Comment</TableCell>
-                  <TableCell align="right">Score</TableCell>
+                  <TableCell align="right">Votes</TableCell>
                   <TableCell>Pinned</TableCell>
                   <TableCell>Created</TableCell>
                   <TableCell align="right">Actions</TableCell>
