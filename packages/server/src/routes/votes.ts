@@ -190,7 +190,11 @@ export default async function votesRoutes(
   app.post(
     "/api/v1/comments/:id/vote",
     {
-      preHandler: [app.authenticate, app.requireActiveUser],
+      preHandler: [
+        app.authenticate,
+        app.requireActiveUser,
+        app.requireNetworkNotBlocked,
+      ],
       ...(options.rateLimits
         ? routeRateLimit(options.rateLimits.votes, options.rateLimits.windowMs)
         : {}),
@@ -200,7 +204,11 @@ export default async function votesRoutes(
   app.delete(
     "/api/v1/comments/:id/vote",
     {
-      preHandler: [app.authenticate, app.requireActiveUser],
+      preHandler: [
+        app.authenticate,
+        app.requireActiveUser,
+        app.requireNetworkNotBlocked,
+      ],
       ...(options.rateLimits
         ? routeRateLimit(options.rateLimits.votes, options.rateLimits.windowMs)
         : {}),

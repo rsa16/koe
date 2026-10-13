@@ -260,7 +260,11 @@ export default async function reactionsRoutes(
     app.post(
       `${basePath}/:id/reactions`,
       {
-        preHandler: [app.authenticate, app.requireActiveUser],
+        preHandler: [
+          app.authenticate,
+          app.requireActiveUser,
+          app.requireNetworkNotBlocked,
+        ],
         ...(options.rateLimits
           ? routeRateLimit(
               options.rateLimits.reactions,
@@ -273,7 +277,11 @@ export default async function reactionsRoutes(
     app.delete(
       `${basePath}/:id/reactions/:emoji`,
       {
-        preHandler: [app.authenticate, app.requireActiveUser],
+        preHandler: [
+          app.authenticate,
+          app.requireActiveUser,
+          app.requireNetworkNotBlocked,
+        ],
         ...(options.rateLimits
           ? routeRateLimit(
               options.rateLimits.reactions,

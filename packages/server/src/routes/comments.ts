@@ -472,7 +472,11 @@ export default async function commentsRoutes(
   app.post(
     "/api/v1/threads/:id/comments",
     {
-      preHandler: [app.authenticate, app.requireActiveUser],
+      preHandler: [
+        app.authenticate,
+        app.requireActiveUser,
+        app.requireNetworkNotBlocked,
+      ],
       ...(options.rateLimits
         ? routeRateLimit(options.rateLimits.comments, options.rateLimits.windowMs)
         : {}),
@@ -496,7 +500,13 @@ export default async function commentsRoutes(
   );
   app.delete(
     "/api/v1/comments/:id",
-    { preHandler: [app.authenticate, app.requireActiveUser] },
+    {
+      preHandler: [
+        app.authenticate,
+        app.requireActiveUser,
+        app.requireNetworkNotBlocked,
+      ],
+    },
     deleteCommentHandler
   );
 }

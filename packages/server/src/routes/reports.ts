@@ -64,7 +64,7 @@ export default async function reportsRoutes(
 
   app.post(
     "/api/v1/comments/:id/reports",
-    { preHandler: app.authenticate },
+    { preHandler: [app.authenticate, app.requireNetworkNotBlocked] },
     createReportHandler
   );
 }

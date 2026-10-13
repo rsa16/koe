@@ -26,6 +26,7 @@ import rateLimitPlugin, { RateLimitConfig } from "./plugins/rate-limit.js";
 import networkAddressesPlugin, {
   NetworkAddressesConfig,
 } from "./plugins/network-addresses.js";
+import networkBlocksPlugin from "./plugins/network-blocks.js";
 import { TrustProxyConfig } from "./trust-proxy.js";
 
 import healthRoutes from "./routes/health.js";
@@ -166,6 +167,9 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     db: options.db,
     enabled: options.networkAddresses?.enabled ?? false,
     retentionMs: options.networkAddresses?.retentionMs ?? 0,
+  });
+  app.register(networkBlocksPlugin, {
+    db: options.db,
   });
 
   app.register(healthRoutes);

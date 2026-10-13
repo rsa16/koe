@@ -5,7 +5,7 @@ import {
   networkBlocks,
   userNetworkAddresses,
 } from "@koe/db";
-import { eq } from "drizzle-orm";
+import { and, eq, gt } from "drizzle-orm";
 
 export const DEFAULT_NETWORK_BLOCK_TTL_MS = 24 * 60 * 60 * 1000;
 export const AUTO_NETWORK_BLOCK_REASON = "Auto-derived from user ban";
@@ -69,4 +69,17 @@ export async function createNetworkBlocksForBan(
   }
 
   return blocks;
+}
+
+/** True when `ip` is currently under an unexpired Network Block. */
+export async function isAddressBlocked(
+  db: Database,
+  ip: string
+): Promise<boolean> {
+  const rows = await db
+    .select({ id: networkBlocks.id })
+    .from(networkBlocks)
+    .where(and(eq(networkBlocks.ip, ip), gt(networkBlocks.expiresAt, new Date())))
+    .limit(1);
+  return rows.length > 0;
 }
