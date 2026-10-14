@@ -32,13 +32,14 @@ export interface CommentsRoutesOptions {
   db: Database;
   rateLimits?: RateLimitConfig;
   events: EventBus;
+  allowGuestComments: boolean;
 }
 
 export default async function commentsRoutes(
   app: FastifyInstance,
   options: CommentsRoutesOptions
 ) {
-  const { db, events } = options;
+  const { db, events, allowGuestComments } = options;
   const duplicateCommentWindowMs =
     options.rateLimits?.duplicateCommentWindowMs ??
     DEFAULT_DUPLICATE_COMMENT_WINDOW_MS;
@@ -49,6 +50,16 @@ export default async function commentsRoutes(
     request: FastifyRequest,
     reply: FastifyReply
   ) => {
+    if (!allowGuestComments && request.user?.role === "guest") {
+      return app.sendProblem(
+        reply,
+        403,
+        "Forbidden",
+        "Sign in is required to post comments",
+        request.url
+      );
+    }
+
     const paramsParsed = CreateCommentParamsSchema.safeParse(request.params);
     if (!paramsParsed.success) {
       return app.sendProblem(

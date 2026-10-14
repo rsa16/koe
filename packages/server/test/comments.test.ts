@@ -528,3 +528,139 @@ describe("Comments API Seam Integration Tests", () => {
     expect(response.headers["content-type"]).toContain("application/problem+json");
   });
 });
+
+describe("Require login to post comments", () => {
+  let app: FastifyInstance;
+  let memDb: Database;
+  const jwtSecret = "test-jwt-secret-at-least-32-chars-long";
+
+  beforeEach(async () => {
+    const { db } = await createMemDb();
+    memDb = db;
+    app = buildApp({
+      db,
+      jwtSecret,
+      logger: false,
+      allowGuestComments: false,
+    });
+    await app.ready();
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  async function createThread(ref = "e2e-require-login"): Promise<string> {
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/v1/threads/by-ref/${encodeURIComponent(ref)}`,
+    });
+    expect(response.statusCode).toBe(200);
+    return response.json().id;
+  }
+
+  async function anonToken(): Promise<string> {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/anonymous",
+    });
+    expect(response.statusCode).toBe(200);
+    return response.json().accessToken;
+  }
+
+  it("rejects a guest comment with 403 Problem Details", async () => {
+    const threadId = await createThread();
+    const token = await anonToken();
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/v1/threads/${threadId}/comments`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { bodyMd: "Guest comment" },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.headers["content-type"]).toContain("application/problem+json");
+    expect(response.json()).toMatchObject({
+      status: 403,
+      title: "Forbidden",
+      detail: "Sign in is required to post comments",
+    });
+  });
+
+  it("still allows a signed-in member to comment", async () => {
+    const threadId = await createThread();
+    const guestToken = await anonToken();
+    const meRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/auth/me",
+      headers: { authorization: `Bearer ${guestToken}` },
+    });
+    expect(meRes.statusCode).toBe(200);
+    const userId = meRes.json().id;
+    await memDb.update(users).set({ role: "member" }).where(eq(users.id, userId));
+    const token = await signAccessToken(
+      { userId, role: "member" },
+      { secret: jwtSecret, expiresIn: "15m" }
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/v1/threads/${threadId}/comments`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { bodyMd: "Member comment" },
+    });
+
+    expect(response.statusCode).toBe(201);
+  });
+
+  it("does not block guest votes or reactions", async () => {
+    const threadId = await createThread();
+    const guestToken = await anonToken();
+
+    const postRes = await app.inject({
+      method: "POST",
+      url: `/api/v1/threads/${threadId}/comments`,
+      headers: { authorization: `Bearer ${guestToken}` },
+      payload: { bodyMd: "Comment to vote on" },
+    });
+    // The author must be signed in to create it; make one via a member token.
+    expect(postRes.statusCode).toBe(403);
+
+    const meRes = await app.inject({
+      method: "GET",
+      url: "/api/v1/auth/me",
+      headers: { authorization: `Bearer ${guestToken}` },
+    });
+    const userId = meRes.json().id;
+    await memDb.update(users).set({ role: "member" }).where(eq(users.id, userId));
+    const memberToken = await signAccessToken(
+      { userId, role: "member" },
+      { secret: jwtSecret, expiresIn: "15m" }
+    );
+    const created = await app.inject({
+      method: "POST",
+      url: `/api/v1/threads/${threadId}/comments`,
+      headers: { authorization: `Bearer ${memberToken}` },
+      payload: { bodyMd: "Comment to vote on" },
+    });
+    expect(created.statusCode).toBe(201);
+    const commentId = created.json().id;
+
+    const voteRes = await app.inject({
+      method: "POST",
+      url: `/api/v1/comments/${commentId}/vote`,
+      headers: { authorization: `Bearer ${guestToken}` },
+      payload: { value: 1 },
+    });
+    expect(voteRes.statusCode).toBe(201);
+
+    const reactRes = await app.inject({
+      method: "POST",
+      url: `/api/v1/comments/${commentId}/reactions`,
+      headers: { authorization: `Bearer ${guestToken}` },
+      payload: { emoji: "👍" },
+    });
+    expect(reactRes.statusCode).toBe(201);
+  });
+});

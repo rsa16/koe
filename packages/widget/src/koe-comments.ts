@@ -152,6 +152,9 @@ export class KoeComments extends LitElement {
   @property({ type: Boolean, attribute: "show-theme-toggle" })
   showThemeToggle = false;
 
+  @property({ type: Boolean, attribute: "require-login" })
+  requireLogin = false;
+
   @state() private comments: CommentNode[] = [];
   @state() private threadId = "";
   @state() private loading = true;
@@ -179,6 +182,7 @@ export class KoeComments extends LitElement {
   @state() private reporting = false;
   @state() private reportedComments: Set<string> = new Set();
   @state() private currentUser: User | null = null;
+  @state() private sessionResolved = false;
   @state() private deletingComment: string | null = null;
   @state() private pinningComment: string | null = null;
 
@@ -257,6 +261,7 @@ export class KoeComments extends LitElement {
     try {
       await this.auth!.resolve();
       this.currentUser = this.auth!.user;
+      this.sessionResolved = true;
       const thread = await this.client!.threads.getByRef(
         this.threadRef,
         undefined,
@@ -586,6 +591,9 @@ export class KoeComments extends LitElement {
 
   private async handleSubmit(e: SubmitEvent) {
     e.preventDefault();
+    if (!this.canPostComments) {
+      return;
+    }
     const body = this.draft.trim();
     if (!body || !this.threadId || this.submitting) {
       return;
@@ -608,6 +616,9 @@ export class KoeComments extends LitElement {
 
   private async handleReplySubmit(e: SubmitEvent) {
     e.preventDefault();
+    if (!this.canPostComments) {
+      return;
+    }
     const body = this.replyDraft.trim();
     if (!body || !this.threadId || !this.replyTo || this.submittingReply) {
       return;
@@ -760,6 +771,29 @@ export class KoeComments extends LitElement {
     );
   }
 
+  private get isGuest(): boolean {
+    return !this.currentUser || this.currentUser.role === "guest";
+  }
+
+  private get canPostComments(): boolean {
+    if (!this.requireLogin) {
+      return true;
+    }
+    return this.sessionResolved && !this.isGuest;
+  }
+
+  /** While a required session is still resolving, hold off on either the
+   * composer or the login prompt so we don't flash the wrong one. */
+  private get composerState(): "hidden" | "prompt" | "form" {
+    if (!this.requireLogin) {
+      return "form";
+    }
+    if (!this.sessionResolved) {
+      return "hidden";
+    }
+    return this.isGuest ? "prompt" : "form";
+  }
+
   private canDelete(comment: CommentNode): boolean {
     return (
       comment.status !== "deleted" &&
@@ -903,19 +937,11 @@ export class KoeComments extends LitElement {
             </p>`
           : nothing}
 
-        <form part="composer" class="composer mb-8" @submit=${this.handleSubmit}>
-          ${this.renderComposer({
-            scope: COMPOSER_SCOPE,
-            placeholder: "What are your thoughts?",
-            rows: 3,
-            draft: this.draft,
-            submitting: this.submitting,
-            submitLabel: "Comment",
-            postingLabel: "Posting...",
-            onInput: this.handleInput,
-            onSubmit: this.handleSubmit,
-          })}
-        </form>
+        ${this.composerState === "hidden"
+          ? nothing
+          : this.composerState === "prompt"
+            ? this.renderLoginPrompt()
+            : this.renderComposerForm()}
 
         ${this.loading ? this.renderLoading() : this.renderCommentList()}
         <slot name="footer"></slot>
@@ -970,6 +996,54 @@ export class KoeComments extends LitElement {
           `
         : nothing}
     `;
+  }
+
+  private renderComposerForm(): TemplateResult {
+    return html`
+      <form part="composer" class="composer mb-8" @submit=${this.handleSubmit}>
+        ${this.renderComposer({
+          scope: COMPOSER_SCOPE,
+          placeholder: "What are your thoughts?",
+          rows: 3,
+          draft: this.draft,
+          submitting: this.submitting,
+          submitLabel: "Comment",
+          postingLabel: "Posting...",
+          onInput: this.handleInput,
+          onSubmit: this.handleSubmit,
+        })}
+      </form>
+    `;
+  }
+
+  private renderLoginPrompt(): TemplateResult {
+    return html`
+      <div
+        part="login-prompt"
+        class="login-prompt mb-8 flex items-center justify-between gap-4 rounded-2xl border border-koe-border bg-koe-surface p-4 text-sm"
+      >
+        <span part="login-prompt-text" class="text-koe-text-muted">
+          Log in to leave a comment.
+        </span>
+        <button
+          type="button"
+          part="login-prompt-button"
+          class="inline-flex shrink-0 items-center justify-center rounded-full bg-koe-surface-strong px-4 py-1.5 text-sm font-semibold text-koe-text-inverse shadow-sm transition-all hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-koe-accent-soft"
+          @click=${this.handleLoginClick}
+        >
+          Log in
+        </button>
+      </div>
+    `;
+  }
+
+  private handleLoginClick() {
+    this.dispatchEvent(
+      new CustomEvent("koe-login-requested", {
+        bubbles: true,
+        composed: true,
+      })
+    );
   }
 
   private renderComposer(options: ComposerOptions): TemplateResult {
@@ -1535,15 +1609,19 @@ export class KoeComments extends LitElement {
                 ${this.icon(ICON_PATHS.flag)}
                 ${reported ? "Reported" : "Report"}
               </button>
-              <button
-                type="button"
-                part="reply-button"
-                class="reply-button inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium text-koe-text-muted transition-colors hover:bg-koe-surface-sunken hover:text-koe-text"
-                @click=${() => this.startReply(comment.id)}
-              >
-                ${this.icon(ICON_PATHS.reply)}
-                Reply
-              </button>
+              ${this.canPostComments
+                ? html`
+                    <button
+                      type="button"
+                      part="reply-button"
+                      class="reply-button inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium text-koe-text-muted transition-colors hover:bg-koe-surface-sunken hover:text-koe-text"
+                      @click=${() => this.startReply(comment.id)}
+                    >
+                      ${this.icon(ICON_PATHS.reply)}
+                      Reply
+                    </button>
+                  `
+                : nothing}
               ${this.canModerate
                 ? html`
                     <button

@@ -53,6 +53,7 @@ export interface BuildAppOptions {
   clientOrigin?: string;
   reactionAllowlist?: string[];
   preModerationDefault?: boolean;
+  allowGuestComments?: boolean;
   sessionSecret?: string;
   trustProxy?: TrustProxyConfig;
   adminDistPath?: string;
@@ -126,6 +127,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     options.reactionAllowlist ?? DEFAULT_EMOJI_ALLOWLIST
   );
   const preModerationDefault = options.preModerationDefault ?? false;
+  const allowGuestComments = options.allowGuestComments ?? true;
 
   const events = createEventBus({
     onError: (error, event) =>
@@ -190,6 +192,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     db: options.db,
     rateLimits: options.rateLimits,
     events,
+    allowGuestComments,
   });
   app.register(votesRoutes, {
     db: options.db,

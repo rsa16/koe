@@ -89,6 +89,9 @@ const addressRetentionMs =
   60 *
   1000;
 
+const allowGuestComments =
+  process.env.ALLOW_GUEST_COMMENTS?.trim().toLowerCase() !== "false";
+
 function parseWebhookSubscriptions(raw: string | undefined) {
   if (!raw) {
     return undefined;
@@ -120,6 +123,7 @@ const app = buildApp({
   discordOAuth,
   clientOrigin: process.env.CLIENT_ORIGIN,
   reactionAllowlist,
+  allowGuestComments,
   rateLimits,
   networkAddresses: {
     enabled: networkBlocksEnabled,

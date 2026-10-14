@@ -1014,4 +1014,127 @@ describe("<koe-comments> widget", () => {
       ).not.toBeNull();
     }
   });
+
+  describe("require-login", () => {
+    async function mountComment(
+      ref: string,
+      body: string,
+      moderatorToken: string
+    ): Promise<string> {
+      const client = createKoeClient({ baseUrl });
+      const { accessToken: authorToken } = await client.auth.anonymous();
+      const thread = await client.threads.getByRef(ref);
+      const created = await client.comments.create(
+        thread.id,
+        { bodyMd: body },
+        authorToken
+      );
+      await client.moderation.act(created.id, "approve", moderatorToken);
+      return created.id;
+    }
+
+    it("shows a login prompt and hides the composer for a guest", async () => {
+      localStorage.clear();
+      const element = mount("widget-require-login-guest", "require-login");
+
+      await waitFor(
+        () =>
+          element.shadowRoot?.querySelector('[part~="login-prompt"]') !== null
+      );
+
+      expect(
+        element.shadowRoot!.querySelector('[part~="login-prompt-button"]')
+      ).not.toBeNull();
+      expect(element.shadowRoot!.querySelector('[part~="composer"]')).toBeNull();
+      expect(
+        element.shadowRoot!.querySelector('form.composer')
+      ).toBeNull();
+    });
+
+    it("emits koe-login-requested when the login prompt is activated", async () => {
+      localStorage.clear();
+      const element = mount("widget-require-login-event", "require-login");
+
+      await waitFor(
+        () =>
+          element.shadowRoot?.querySelector('[part~="login-prompt"]') !== null
+      );
+
+      let fired = 0;
+      element.addEventListener("koe-login-requested", () => {
+        fired += 1;
+      });
+
+      (
+        element.shadowRoot!.querySelector(
+          '[part~="login-prompt-button"]'
+        ) as HTMLButtonElement
+      ).click();
+
+      expect(fired).toBe(1);
+    });
+
+    it("hides the reply button for a guest", async () => {
+      localStorage.clear();
+      const moderatorToken = await roleToken("moderator");
+      await mountComment(
+        "widget-require-login-reply",
+        "Parent",
+        moderatorToken
+      );
+      const element = mount("widget-require-login-reply", "require-login");
+
+      await waitFor(
+        () => element.shadowRoot?.querySelector(".comment") !== null
+      );
+
+      expect(
+        element.shadowRoot!.querySelector('[part~="reply-button"]')
+      ).toBeNull();
+      expect(
+        element.shadowRoot!.querySelector('[part~="login-prompt"]')
+      ).not.toBeNull();
+    });
+
+    it("lets a guest still vote and react", async () => {
+      localStorage.clear();
+      const moderatorToken = await roleToken("moderator");
+      const commentId = await mountComment(
+        "widget-require-login-vote",
+        "Vote target",
+        moderatorToken
+      );
+      const element = mount("widget-require-login-vote", "require-login");
+
+      await waitFor(
+        () => element.shadowRoot?.querySelector(".comment") !== null
+      );
+
+      const client = createKoeClient({ baseUrl });
+      const { accessToken: guestToken } = await client.auth.anonymous();
+      const vote = await client.comments.vote(commentId, 1, guestToken);
+      const reaction = await client.comments.react(commentId, "👍", guestToken);
+      expect(vote?.commentId).toBe(commentId);
+      expect(reaction?.targetId).toBe(commentId);
+    });
+
+    it("shows the composer to a signed-in member", async () => {
+      const token = await roleToken("member");
+      const element = mount(
+        "widget-require-login-member",
+        `require-login token="${token}"`
+      );
+
+      await waitFor(
+        () => element.shadowRoot?.querySelector('form.composer') !== null
+      );
+
+      expect(
+        element.shadowRoot!.querySelector('[part~="composer"]')
+      ).not.toBeNull();
+      expect(
+        element.shadowRoot!.querySelector('[part~="login-prompt"]')
+      ).toBeNull();
+    });
+  });
 });
