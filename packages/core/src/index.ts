@@ -396,6 +396,23 @@ export const NetworkBlockSchema = z.object({
 });
 export type NetworkBlock = z.infer<typeof NetworkBlockSchema>;
 
+// Admin console view over active Network Blocks. `createdByName` is the admin
+// whose ban derived the block; `bannedUserId`/`bannedUserName` are the most
+// recently banned User it was derived from (null when no ban is on record).
+export const AdminNetworkBlockItemSchema = NetworkBlockSchema.extend({
+  createdByName: z.string().nullable(),
+  bannedUserId: z.string().uuid().nullable(),
+  bannedUserName: z.string().nullable(),
+});
+export type AdminNetworkBlockItem = z.infer<typeof AdminNetworkBlockItemSchema>;
+
+export const AdminNetworkBlockListResponseSchema = z.object({
+  blocks: z.array(AdminNetworkBlockItemSchema),
+});
+export type AdminNetworkBlockListResponse = z.infer<
+  typeof AdminNetworkBlockListResponseSchema
+>;
+
 // Admin comments console: a filterable, paginated view over every comment,
 // not just the pending/reported queue.
 export const AdminCommentListQuerySchema = z.object({

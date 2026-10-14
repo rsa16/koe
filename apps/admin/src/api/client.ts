@@ -3,6 +3,7 @@ import {
   AdminBulkCommentActionResponseSchema,
   AdminCommentListResponseSchema,
   AdminCommentThreadListResponseSchema,
+  AdminNetworkBlockListResponseSchema,
   AdminSessionSchema,
   AdminSessionUserSchema,
   AdminSettingsSchema,
@@ -18,6 +19,7 @@ import type {
   AdminCommentListQueryInput,
   AdminCommentListResponse,
   AdminCommentThread,
+  AdminNetworkBlockItem,
   AdminSession,
   AdminSettings,
   AdminUpdateUserBody,
@@ -200,6 +202,26 @@ export async function updateUser(
     throw await toError(response);
   }
   return UserSchema.parse(await response.json());
+}
+
+export async function fetchNetworkBlocks(): Promise<AdminNetworkBlockItem[]> {
+  const response = await request(apiPath("/admin/network-blocks"));
+  if (!response.ok) {
+    throw await toError(response);
+  }
+  return AdminNetworkBlockListResponseSchema.parse(await response.json())
+    .blocks;
+}
+
+export async function revokeNetworkBlock(blockId: string): Promise<void> {
+  const csrfToken = readCookie(CSRF_COOKIE);
+  const response = await request(apiPath(`/admin/network-blocks/${blockId}`), {
+    method: "DELETE",
+    headers: csrfToken ? { [CSRF_HEADER]: csrfToken } : {},
+  });
+  if (!response.ok) {
+    throw await toError(response);
+  }
 }
 
 export async function fetchSettings(): Promise<AdminSettings> {
