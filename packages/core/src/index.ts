@@ -100,6 +100,71 @@ export const IdentitySchema = z.object({
 });
 export type Identity = z.infer<typeof IdentitySchema>;
 
+// Flair schemas
+// A Flair is a hand-editable definition (slug, label, colour, rank). Staff Flairs
+// are derived from a User's role and are not stored here (see CONTEXT.md).
+export const FlairSlugSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(64)
+  .regex(
+    /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
+    "Must be a lowercase slug of letters, digits and single hyphens"
+  );
+export type FlairSlug = z.infer<typeof FlairSlugSchema>;
+
+export const FlairLabelSchema = z.string().trim().min(1).max(80);
+export type FlairLabel = z.infer<typeof FlairLabelSchema>;
+
+export const FlairColourSchema = z
+  .string()
+  .regex(
+    /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/,
+    "Must be a hex colour such as #a1b2c3"
+  );
+export type FlairColour = z.infer<typeof FlairColourSchema>;
+
+export const FlairRankSchema = z.number().int();
+export type FlairRank = z.infer<typeof FlairRankSchema>;
+
+export const FlairSchema = z.object({
+  id: z.string().uuid(),
+  slug: FlairSlugSchema,
+  label: FlairLabelSchema,
+  colour: FlairColourSchema,
+  rank: FlairRankSchema,
+  createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
+});
+export type Flair = z.infer<typeof FlairSchema>;
+
+export const CreateFlairBodySchema = z.object({
+  slug: FlairSlugSchema,
+  label: FlairLabelSchema,
+  colour: FlairColourSchema,
+  rank: FlairRankSchema,
+});
+export type CreateFlairBody = z.infer<typeof CreateFlairBodySchema>;
+
+// The slug is deliberately immutable: external systems hold on to it, so a
+// rename is a label change, not a slug change.
+export const UpdateFlairBodySchema = z
+  .object({
+    label: FlairLabelSchema.optional(),
+    colour: FlairColourSchema.optional(),
+    rank: FlairRankSchema.optional(),
+  })
+  .refine((data) => Object.keys(data).length > 0, {
+    message: "At least one field must be provided to update",
+  });
+export type UpdateFlairBody = z.infer<typeof UpdateFlairBodySchema>;
+
+export const FlairListResponseSchema = z.object({
+  flairs: z.array(FlairSchema),
+});
+export type FlairListResponse = z.infer<typeof FlairListResponseSchema>;
+
 // Thread schemas
 export const ThreadSchema = z.object({
   id: z.string().uuid(),

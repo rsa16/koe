@@ -85,6 +85,13 @@
       "when": 1791931420426,
       "tag": "0011_familiar_killraven",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1792354078712,
+      "tag": "0012_jazzy_cloak",
+      "breakpoints": true
     }
   ]
 }

@@ -292,6 +292,18 @@ The admin UI manages users through the session-cookie endpoints below rather
 than this bearer endpoint. `PATCH /api/v1/admin/users/:id` accepts a `role`
 and/or `status` and writes a `ban`/`suspend` audit record on status changes.
 
+### Flairs
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| `GET` | `/api/v1/flairs` | — | Public `Flair` definitions, ordered by `rank`. |
+
+A `Flair` is a hand-editable label rendered beside a `User`'s name: a stable
+`slug`, a `label`, a hex `colour` and an integer `rank`. `rank` is the single
+source of display order. Definitions are managed from the admin UI's Flairs page
+through the session-cookie endpoints below. Deleting a `Flair` removes every
+`User`'s holding of it rather than leaving dangling references.
+
 ### Admin UI API
 
 Routes used by the `/admin` single-page app. They authenticate with the
@@ -309,6 +321,10 @@ role. State-changing requests must send the `koe_csrf` cookie value back in the
 | `POST` | `/api/v1/admin/moderation/actions` | session cookie + CSRF | Same body/semantics as `POST /api/v1/moderation/actions`. |
 | `GET` | `/api/v1/admin/users` | session cookie (`admin`) | Paginated users. Query `page` (default 1), `pageSize` (default 20, max 100), `role`, `status`, `search` (name/email substring). Returns `{ users, total, page, pageSize }`. |
 | `PATCH` | `/api/v1/admin/users/:id` | session cookie (`admin`) + CSRF | Body `{ role?, status? }` (at least one required). Changes a user's role and/or status. Status `banned`/`suspended` writes a `ban`/`suspend` audit record; `active` reactivates. Returns the updated `User`. |
+| `GET` | `/api/v1/admin/flairs` | session cookie (`admin`) | Same payload as `GET /api/v1/flairs`. |
+| `POST` | `/api/v1/admin/flairs` | session cookie (`admin`) + CSRF | Body `{ slug, label, colour, rank }`. Creates a `Flair` (`201`). Duplicate `slug` → `409`; invalid `slug`, `label` or `colour` → `422`. |
+| `PATCH` | `/api/v1/admin/flairs/:id` | session cookie (`admin`) + CSRF | Body `{ label?, colour?, rank? }` (at least one required). The `slug` is immutable. Returns the updated `Flair`. |
+| `DELETE` | `/api/v1/admin/flairs/:id` | session cookie (`admin`) + CSRF | Deletes a `Flair`, removing any `User`'s holding of it. `204`. |
 | `GET` | `/api/v1/admin/settings` | session cookie (`admin`) | Read-only effective configuration the SPA renders on the Settings page. |
 
 ## Extensibility

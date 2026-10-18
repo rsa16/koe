@@ -159,6 +159,30 @@ export async function createMemDb() {
     );
 
     CREATE INDEX idx_network_blocks_expires_at ON network_blocks (expires_at);
+
+    CREATE TABLE flairs (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      slug TEXT NOT NULL UNIQUE,
+      label TEXT NOT NULL,
+      colour TEXT NOT NULL,
+      rank INTEGER NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX idx_flairs_rank ON flairs (rank);
+
+    CREATE TABLE user_flairs (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      flair_id UUID NOT NULL REFERENCES flairs(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (user_id, flair_id)
+    );
+
+    CREATE INDEX idx_user_flairs_flair_id ON user_flairs (flair_id);
+    CREATE INDEX idx_user_flairs_user_id ON user_flairs (user_id);
   `);
 
   const db = drizzle(client, { schema });

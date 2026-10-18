@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import AdminLayout from "./pages/AdminLayout";
 import CommentsPage from "./pages/CommentsPage";
+import FlairsPage from "./pages/FlairsPage";
 import LoginPage from "./pages/LoginPage";
 import ModerationQueuePage from "./pages/ModerationQueuePage";
 import NetworkBlocksPage from "./pages/NetworkBlocksPage";
@@ -15,6 +16,7 @@ export default function App() {
         <Route path="/queue" element={<ModerationQueuePage />} />
         <Route path="/comments" element={<CommentsPage />} />
         <Route path="/users" element={<UsersPage />} />
+        <Route path="/flairs" element={<FlairsPage />} />
         <Route path="/network-blocks" element={<NetworkBlocksPage />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Route>

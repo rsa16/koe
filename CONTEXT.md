@@ -9,6 +9,10 @@
 - **User**: Account with role `guest|member|moderator|admin`, status `active|suspended|banned`.
 - **Network Block**: A time-boxed refusal of write interactions from a client IP address. Auto-derived from a User ban; independent of, and outlives, that User's status.
 - **Identity**: One per login method (`anonymous|google|discord|github|x`); many → one User, merged on login.
+- **Flair**: A hand-editable definition (`slug`, `label`, `colour`, `rank`) shown as a label beside a name. The `slug` is stable and held by external systems; `rank` is the only source of display order.
+- **Staff Flair**: A Flair derived from a User's `moderator`/`admin` role. Always shown, first; never held or chosen.
+- **Supporter Flair**: A Flair assigned to a User by an external system to recognise Support. A User holds every one assigned.
+- **Flair Selection**: The held Supporter Flairs a User chooses to display (at most three). Order is `rank`, never the selection.
 - **Media**: Client-side upload via pluggable provider (imgbb), key in client; returns URL to embed.
 - **ModerationAction**: Audit of approve/reject/delete/spam/ban/suspend/block/lock.
 - **Domain Event**: Envelope `{ id, type, occurredAt, data }` emitted on the in-process event bus from a fixed catalog (`comment.created`, `report.created`, `vote.created`, ...).

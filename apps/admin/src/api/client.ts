@@ -11,7 +11,11 @@ import {
   AdminUserListResponseSchema,
   CommentModerationActionVerbSchema,
   CommentSchema,
+  CreateFlairBodySchema,
+  FlairListResponseSchema,
+  FlairSchema,
   ModerationQueueResponseSchema,
+  UpdateFlairBodySchema,
   UserSchema,
 } from "@koe/core";
 import type {
@@ -27,7 +31,10 @@ import type {
   AdminUserListResponse,
   Comment,
   CommentModerationActionVerb,
+  CreateFlairBody,
+  Flair,
   ModerationQueueItem,
+  UpdateFlairBody,
   User,
 } from "@koe/core";
 
@@ -281,4 +288,60 @@ export async function bulkModerateComments(
   }
   return AdminBulkCommentActionResponseSchema.parse(await response.json())
     .updated;
+}
+
+export async function fetchFlairs(): Promise<Flair[]> {
+  const response = await request(apiPath("/admin/flairs"));
+  if (!response.ok) {
+    throw await toError(response);
+  }
+  return FlairListResponseSchema.parse(await response.json()).flairs;
+}
+
+export async function createFlair(body: CreateFlairBody): Promise<Flair> {
+  const parsed = CreateFlairBodySchema.parse(body);
+  const csrfToken = readCookie(CSRF_COOKIE);
+  const response = await request(apiPath("/admin/flairs"), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(csrfToken ? { [CSRF_HEADER]: csrfToken } : {}),
+    },
+    body: JSON.stringify(parsed),
+  });
+  if (!response.ok) {
+    throw await toError(response);
+  }
+  return FlairSchema.parse(await response.json());
+}
+
+export async function updateFlair(
+  flairId: string,
+  update: UpdateFlairBody
+): Promise<Flair> {
+  const parsed = UpdateFlairBodySchema.parse(update);
+  const csrfToken = readCookie(CSRF_COOKIE);
+  const response = await request(apiPath(`/admin/flairs/${flairId}`), {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      ...(csrfToken ? { [CSRF_HEADER]: csrfToken } : {}),
+    },
+    body: JSON.stringify(parsed),
+  });
+  if (!response.ok) {
+    throw await toError(response);
+  }
+  return FlairSchema.parse(await response.json());
+}
+
+export async function deleteFlair(flairId: string): Promise<void> {
+  const csrfToken = readCookie(CSRF_COOKIE);
+  const response = await request(apiPath(`/admin/flairs/${flairId}`), {
+    method: "DELETE",
+    headers: csrfToken ? { [CSRF_HEADER]: csrfToken } : {},
+  });
+  if (!response.ok) {
+    throw await toError(response);
+  }
 }

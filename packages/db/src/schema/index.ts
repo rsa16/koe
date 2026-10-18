@@ -191,3 +191,32 @@ export const networkBlocks = pgTable(
     index("idx_network_blocks_expires_at").on(table.expiresAt),
   ]
 );
+
+// Flair definitions. Rank is the single source of display order; no other
+// ordering is stored. Staff Flairs are derived from a User's role and are not
+// rows in this table.
+export const flairs = pgTable("flairs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  slug: text("slug").notNull().unique(),
+  label: text("label").notNull(),
+  colour: text("colour").notNull(),
+  rank: integer("rank").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("idx_flairs_rank").on(table.rank),
+]);
+
+// The Flairs a User holds. Deleting a Flair removes the holdings rather than
+// leaving dangling references.
+export const userFlairs = pgTable("user_flairs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  flairId: uuid("flair_id").notNull().references(() => flairs.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("idx_user_flairs_user_flair").on(table.userId, table.flairId),
+  index("idx_user_flairs_flair_id").on(table.flairId),
+  index("idx_user_flairs_user_id").on(table.userId),
+]);

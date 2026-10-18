@@ -22,6 +22,7 @@ const ADMIN_NAV = [
   { label: "Moderation Queue", value: "/queue" },
   { label: "Comments", value: "/comments" },
   { label: "Users", value: "/users" },
+  { label: "Flairs", value: "/flairs" },
   { label: "Network Blocks", value: "/network-blocks" },
   { label: "Settings", value: "/settings" },
 ];

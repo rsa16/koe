@@ -43,6 +43,7 @@ import adminUsersRoutes from "./routes/admin-users.js";
 import adminCommentsRoutes from "./routes/admin-comments.js";
 import adminNetworkBlocksRoutes from "./routes/admin-network-blocks.js";
 import adminSettingsRoutes from "./routes/admin-settings.js";
+import flairsRoutes from "./routes/flairs.js";
 
 export interface BuildAppOptions {
   db: Database;
@@ -218,6 +219,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     googleOAuthEnabled: Boolean(googleOAuth),
     discordOAuthEnabled: Boolean(discordOAuth),
   });
+  app.register(flairsRoutes, { db: options.db });
 
   registerAdminSpa(app, options.adminDistPath, options.adminBase);
 
