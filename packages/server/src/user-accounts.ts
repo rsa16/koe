@@ -34,6 +34,17 @@ export async function mergeGuestIntoUser(
   });
 }
 
+export interface OAuthUserResolution {
+  user: User;
+  /**
+   * The provider Identity this login created, or `null` when an existing
+   * Identity was reused. Only the former is a new link. A guest merged into an
+   * account whose Identity was already linked reuses that Identity, so it
+   * reports `null`.
+   */
+  linkedIdentity: { provider: IdentityProvider; providerUserId: string } | null;
+}
+
 /**
  * Resolves an OAuth profile to a User, creating or reusing the Identity for
  * `provider`. When a guest session is present, its Identity is claimed (or the
@@ -44,7 +55,7 @@ export async function resolveOAuthUser(
   provider: IdentityProvider,
   profile: OAuthProfile,
   guestUserId?: string
-): Promise<User> {
+): Promise<OAuthUserResolution> {
   const guest = guestUserId ? await findAnonymousGuest(db, guestUserId) : undefined;
 
   const existingIdentity = await db
@@ -66,7 +77,7 @@ export async function resolveOAuthUser(
     if (guest) {
       await mergeGuestIntoUser(db, guest.id, existingUser.id);
     }
-    return UserSchema.parse(existingUser);
+    return { user: UserSchema.parse(existingUser), linkedIdentity: null };
   }
 
   const profileData = {
@@ -93,7 +104,10 @@ export async function resolveOAuthUser(
       })
       .where(eq(users.id, guest.id))
       .returning();
-    return UserSchema.parse(updated);
+    return {
+      user: UserSchema.parse(updated),
+      linkedIdentity: { provider, providerUserId: profile.sub },
+    };
   }
 
   const [newUser] = await db
@@ -115,5 +129,8 @@ export async function resolveOAuthUser(
     profileData,
   });
 
-  return UserSchema.parse(newUser);
+  return {
+    user: UserSchema.parse(newUser),
+    linkedIdentity: { provider, providerUserId: profile.sub },
+  };
 }

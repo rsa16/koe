@@ -185,6 +185,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     db: options.db,
     jwtSecret,
     clientOrigin,
+    events,
     googleOAuth,
     discordOAuth,
     refreshTokenMaxAgeSeconds: options.refreshTokenMaxAgeSeconds,

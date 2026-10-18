@@ -4066,6 +4066,7 @@ var EVENT_NAMES = [
   "user.banned",
   "user.suspended",
   "user.network_blocked",
+  "identity.linked",
   "thread.closed",
   "thread.locked",
   "vote.created",

@@ -9,6 +9,7 @@ import {
 } from "@koe/auth";
 import {
   AuthTokenResponseSchema,
+  EventBus,
   IdentityProvider,
   OAuthCallbackQuerySchema,
   OAuthCallbackResponseSchema,
@@ -33,7 +34,7 @@ import {
   generateCodeVerifier,
   generateState,
 } from "../oauth.js";
-import { resolveOAuthUser } from "../user-accounts.js";
+import { OAuthUserResolution, resolveOAuthUser } from "../user-accounts.js";
 
 const OAUTH_STATE_COOKIE = "koe_oauth_state";
 
@@ -41,6 +42,7 @@ export interface AuthRoutesOptions {
   db: Database;
   jwtSecret: string;
   clientOrigin: string;
+  events: EventBus;
   googleOAuth?: GoogleOAuthProvider;
   discordOAuth?: DiscordOAuthProvider;
   /** Refresh-token lifetime; overridable mainly so tests can force expiry. */
@@ -65,6 +67,7 @@ export default async function authRoutes(
     db,
     jwtSecret,
     clientOrigin,
+    events,
     googleOAuth,
     discordOAuth,
     refreshTokenMaxAgeSeconds,
@@ -394,9 +397,14 @@ export default async function authRoutes(
         );
       }
 
-      let user: User;
+      let resolution: OAuthUserResolution;
       try {
-        user = await resolveOAuthUser(db, provider, profile, oauthState.guestUserId);
+        resolution = await resolveOAuthUser(
+          db,
+          provider,
+          profile,
+          oauthState.guestUserId
+        );
       } catch {
         clearStateCookie();
         return sendOAuthErrorPage(
@@ -404,6 +412,15 @@ export default async function authRoutes(
           "Failed to resolve the user account",
           clientOrigin
         );
+      }
+
+      const { user, linkedIdentity } = resolution;
+      if (linkedIdentity) {
+        events.emit("identity.linked", {
+          userId: user.id,
+          provider: linkedIdentity.provider,
+          providerUserId: linkedIdentity.providerUserId,
+        });
       }
 
       const { accessToken, refreshToken } = await issueTokens(user);

@@ -170,6 +170,7 @@ describe("Core Zod Schemas", () => {
   it("recognises the fixed event catalog and rejects unknown events", () => {
     expect(EventNameSchema.safeParse("comment.created").success).toBe(true);
     expect(EventNameSchema.safeParse("report.resolved").success).toBe(true);
+    expect(EventNameSchema.safeParse("identity.linked").success).toBe(true);
     expect(EventNameSchema.safeParse("comment.exploded").success).toBe(false);
   });
 

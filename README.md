@@ -357,6 +357,7 @@ subscriber can resolve the thread's `externalRef` without a second request.
 | `report.resolved` | A `Report` is resolved by a moderation action. |
 | `user.banned` | A `User` is banned. |
 | `user.suspended` | A `User` is suspended. |
+| `identity.linked` | A login links a *new* provider `Identity` to a `User` (including a guest being claimed); the anonymous guest Identity does not count. The payload is `{ userId, provider, providerUserId }`. Not emitted when an already-linked `Identity` is reused. |
 | `thread.closed` | A `Thread` is closed (reserved; not yet emitted). |
 | `thread.locked` | A `Thread` is locked (reserved; not yet emitted). |
 | `vote.created` | A `Vote` is cast or changed. |
