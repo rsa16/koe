@@ -36,6 +36,11 @@ export const UserSchema = z.object({
   email: z.string().email().nullable(),
   avatarUrl: z.string().url().nullable(),
   metadata: z.record(z.unknown()).default({}),
+  // The Flair Selection: held Supporter Flair ids the User chooses to display.
+  // Order is not meaningful; display order always comes from `rank`. An empty
+  // array means the User has not narrowed their selection, so all held
+  // Supporter Flairs display (ranked, up to three).
+  displayedFlairIds: z.array(z.string().uuid()).default([]),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
   lastActiveAt: z.coerce.date(),
@@ -55,10 +60,19 @@ export const UpdateProfileBodySchema = z
   .object({
     name: z.string().trim().min(1).max(80).nullable().optional(),
     avatarUrl: z.string().url().max(2048).nullable().optional(),
+    // Semantic checks (held, at most three) happen in the route so they can
+    // answer 422 without changing anything.
+    displayedFlairIds: z.array(z.string().uuid()).optional(),
   })
-  .refine((data) => data.name !== undefined || data.avatarUrl !== undefined, {
-    message: "At least one field must be provided to update",
-  });
+  .refine(
+    (data) =>
+      data.name !== undefined ||
+      data.avatarUrl !== undefined ||
+      data.displayedFlairIds !== undefined,
+    {
+      message: "At least one field must be provided to update",
+    }
+  );
 export type UpdateProfileBody = z.infer<typeof UpdateProfileBodySchema>;
 
 export const AdminUpdateUserBodySchema = z
@@ -164,6 +178,13 @@ export const FlairListResponseSchema = z.object({
   flairs: z.array(FlairSchema),
 });
 export type FlairListResponse = z.infer<typeof FlairListResponseSchema>;
+
+// The current User's profile: the User plus the definitions of every Supporter
+// Flair they currently hold. The Flair Selection lives on the User itself.
+export const UserProfileSchema = UserSchema.extend({
+  flairs: z.array(FlairSchema).default([]),
+});
+export type UserProfile = z.infer<typeof UserProfileSchema>;
 
 // A Flair as rendered beside an author's name on a Comment. Supporter Flairs are
 // projected from the definition rows the author holds; Staff Flairs are derived

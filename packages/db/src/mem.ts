@@ -26,6 +26,7 @@ export async function createMemDb() {
       email TEXT,
       avatar_url TEXT,
       metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+      displayed_flair_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       last_active_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

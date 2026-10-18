@@ -23,7 +23,7 @@ import { and, eq, gt, inArray, notInArray, or, sql } from "drizzle-orm";
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { computeReplyPosition } from "../replies.js";
 import { parseCommentIdParam } from "../comment-scoped.js";
-import { authorFlairsFor, loadHeldFlairs } from "../author-flairs.js";
+import { authorFlairsFor, loadDisplayedFlairs } from "../author-flairs.js";
 import {
   DEFAULT_DUPLICATE_COMMENT_WINDOW_MS,
   RateLimitConfig,
@@ -320,15 +320,16 @@ export default async function commentsRoutes(
       );
 
     // Every Flair an author displays is resolved once per page: Staff Flairs
-    // from the role plus the Supporter Flairs they hold, ordered server-side.
+    // from the role plus the effective Supporter Flair set (Selection
+    // intersected with holdings, or the ranked default), ordered server-side.
     const authorIds = [
       ...new Set(
         [...rootRows, ...descendantRows].map((row) => row.comment.authorId)
       ),
     ];
-    const heldByAuthor = await loadHeldFlairs(db, authorIds);
+    const displayedByAuthor = await loadDisplayedFlairs(db, authorIds);
     const withFlairs = (row: CommentAuthorRow): CommentRowWithAuthor =>
-      attachAuthor(row, heldByAuthor);
+      attachAuthor(row, displayedByAuthor);
     const roots = rootRows.map(withFlairs);
     const descendants = descendantRows.map(withFlairs);
 
@@ -554,7 +555,7 @@ interface CommentTreeNode extends CommentRowWithAuthor {
 
 function attachAuthor(
   row: CommentAuthorRow,
-  heldByAuthor: Map<string, CommentAuthorFlair[]>
+  displayedByAuthor: Map<string, CommentAuthorFlair[]>
 ): CommentRowWithAuthor {
   const deleted = row.comment.status === "deleted";
   return {
@@ -567,7 +568,7 @@ function attachAuthor(
     authorRole: row.authorRole,
     authorFlairs: authorFlairsFor(
       row.authorRole,
-      heldByAuthor.get(row.comment.authorId) ?? []
+      displayedByAuthor.get(row.comment.authorId) ?? []
     ),
   };
 }

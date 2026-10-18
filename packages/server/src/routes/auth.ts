@@ -18,10 +18,16 @@ import {
   Session,
   UpdateProfileBodySchema,
   User,
+  UserProfile,
+  UserProfileSchema,
   UserSchema,
 } from "@koe/core";
 import { Database, identities, sessions, users } from "@koe/db";
 import { eq } from "drizzle-orm";
+import {
+  loadHeldFlairDefinitions,
+  loadHeldFlairIds,
+} from "../author-flairs.js";
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import crypto from "node:crypto";
 import { renderOAuthSuccessPage, sendOAuthErrorPage } from "../oauth-render.js";
@@ -126,6 +132,12 @@ export default async function authRoutes(
       accessToken: await issueAccessToken(user),
       refreshToken: await issueRefreshToken(user.id),
     };
+  }
+
+  /** The User plus the definitions of every Supporter Flair they hold. */
+  async function profileFor(user: User): Promise<UserProfile> {
+    const held = await loadHeldFlairDefinitions(db, user.id);
+    return UserProfileSchema.parse({ ...user, flairs: held });
   }
 
   // Auth: Anonymous guest login
@@ -241,10 +253,10 @@ export default async function authRoutes(
   // Auth: Current user profile
   // GET /api/v1/auth/me
   const meHandler = async (request: FastifyRequest, reply: FastifyReply) => {
-    return reply.status(200).send(UserSchema.parse(request.user));
+    return reply.status(200).send(await profileFor(request.user!));
   };
 
-  // Auth: Update current user profile (name and/or avatar)
+  // Auth: Update current user profile (name, avatar and/or Flair Selection)
   // PATCH /api/v1/auth/me
   const updateMeHandler = async (
     request: FastifyRequest,
@@ -273,14 +285,44 @@ export default async function authRoutes(
       );
     }
 
-    const { name, avatarUrl } = bodyParsed.data;
+    const { name, avatarUrl, displayedFlairIds } = bodyParsed.data;
     const update: {
       name?: string | null;
       avatarUrl?: string | null;
+      displayedFlairIds?: string[];
       updatedAt: Date;
     } = { updatedAt: new Date() };
     if (name !== undefined) update.name = name;
     if (avatarUrl !== undefined) update.avatarUrl = avatarUrl;
+    if (displayedFlairIds !== undefined) {
+      // The Flair Selection is a set: duplicates collapse. A request with more
+      // than three entries is rejected outright, as is any Flair the User does
+      // not currently hold (Staff Flairs are derived, never held, so they can
+      // never appear here).
+      if (displayedFlairIds.length > 3) {
+        return app.sendProblem(
+          reply,
+          422,
+          "Unprocessable Entity",
+          "A Flair Selection can contain at most three Flairs",
+          request.url
+        );
+      }
+      const selection = [...new Set(displayedFlairIds)];
+
+      const heldIds = await loadHeldFlairIds(db, user.id);
+      if (selection.some((flairId) => !heldIds.has(flairId))) {
+        return app.sendProblem(
+          reply,
+          422,
+          "Unprocessable Entity",
+          "A Flair Selection may only contain Flairs the user holds",
+          request.url
+        );
+      }
+
+      update.displayedFlairIds = selection;
+    }
 
     const [updated] = await db
       .update(users)
@@ -288,7 +330,7 @@ export default async function authRoutes(
       .where(eq(users.id, user.id))
       .returning();
 
-    return reply.status(200).send(UserSchema.parse(updated));
+    return reply.status(200).send(await profileFor(UserSchema.parse(updated)));
   };
 
   // Auth: OAuth start + callback, registered once per provider.

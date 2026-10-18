@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "displayed_flair_ids" jsonb DEFAULT '[]'::jsonb NOT NULL;

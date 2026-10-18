@@ -27,6 +27,8 @@ import {
   UpdateProfileBody,
   User,
   UserModerationActionVerb,
+  UserProfile,
+  UserProfileSchema,
   UserSchema,
   Vote,
   VoteSchema,
@@ -58,6 +60,7 @@ export type {
   ThreadResponse,
   UpdateProfileBody,
   User,
+  UserProfile,
   Vote,
   VoteValue,
 } from "@koe/core";
@@ -125,8 +128,8 @@ export interface KoeClient {
   auth: {
     anonymous(): Promise<AuthTokenResponse>;
     refresh(refreshToken: string): Promise<AuthTokenResponse>;
-    me(token?: string): Promise<User>;
-    updateMe(body: UpdateProfileBody, token?: string): Promise<User>;
+    me(token?: string): Promise<UserProfile>;
+    updateMe(body: UpdateProfileBody, token?: string): Promise<UserProfile>;
   };
   threads: {
     getByRef(
@@ -296,9 +299,13 @@ export function createKoeClient(options: KoeClientOptions): KoeClient {
           body: { refreshToken },
         }),
       me: (token) =>
-        request(UserSchema, "/auth/me", { method: "GET", token }),
+        request(UserProfileSchema, "/auth/me", { method: "GET", token }),
       updateMe: (body, token) =>
-        request(UserSchema, "/auth/me", { method: "PATCH", body, token }),
+        request(UserProfileSchema, "/auth/me", {
+          method: "PATCH",
+          body,
+          token,
+        }),
     },
     threads: {
       getByRef: (ref, query, token) =>

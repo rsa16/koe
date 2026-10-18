@@ -20,6 +20,13 @@ export const users = pgTable("users", {
   email: text("email"),
   avatarUrl: text("avatar_url"),
   metadata: jsonb("metadata").notNull().default({}),
+  // The Flair Selection: held Supporter Flair ids, at most three. An empty
+  // array means no choice has been made, so every held Supporter Flair
+  // displays (ranked, up to three). Order is never meaningful.
+  displayedFlairIds: jsonb("displayed_flair_ids")
+    .$type<string[]>()
+    .notNull()
+    .default([]),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   lastActiveAt: timestamp("last_active_at", { withTimezone: true }).notNull().defaultNow(),
