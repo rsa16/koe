@@ -115,6 +115,7 @@ const app = buildApp({
   db,
   jwtSecret,
   sessionSecret: process.env.SESSION_SECRET,
+  serviceToken: process.env.KOE_SERVICE_TOKEN,
   trustProxy: parseTrustProxy(process.env.TRUST_PROXY, {
     allowUnbounded:
       process.env.TRUST_PROXY_ALLOW_UNBOUNDED?.trim().toLowerCase() === "true",

@@ -165,6 +165,39 @@ export const FlairListResponseSchema = z.object({
 });
 export type FlairListResponse = z.infer<typeof FlairListResponseSchema>;
 
+// Service API schemas
+// A scoped service credential (a single configured secret) may do exactly two
+// things: replace a User's held Flairs wholesale, and resolve a provider
+// Identity to its owning User. Setting is whole-set and idempotent, so absence
+// means release.
+export const ServiceFlairAssignmentBodySchema = z.object({
+  slugs: z.array(FlairSlugSchema),
+});
+export type ServiceFlairAssignmentBody = z.infer<
+  typeof ServiceFlairAssignmentBodySchema
+>;
+
+export const ServiceFlairAssignmentResponseSchema = z.object({
+  applied: z.array(FlairSlugSchema),
+  unknownSlugs: z.array(FlairSlugSchema),
+});
+export type ServiceFlairAssignmentResponse = z.infer<
+  typeof ServiceFlairAssignmentResponseSchema
+>;
+
+export const ServiceIdentityQuerySchema = z.object({
+  provider: IdentityProviderSchema,
+  providerUserId: z.string().trim().min(1),
+});
+export type ServiceIdentityQuery = z.infer<typeof ServiceIdentityQuerySchema>;
+
+export const ServiceIdentityResponseSchema = z.object({
+  userId: z.string().uuid(),
+});
+export type ServiceIdentityResponse = z.infer<
+  typeof ServiceIdentityResponseSchema
+>;
+
 // Thread schemas
 export const ThreadSchema = z.object({
   id: z.string().uuid(),

@@ -22,6 +22,7 @@ import {
 import problemDetailsPlugin from "./plugins/problem-details.js";
 import authenticatePlugin from "./plugins/authenticate.js";
 import adminSessionPlugin from "./plugins/admin-session.js";
+import serviceTokenPlugin from "./plugins/service-token.js";
 import rateLimitPlugin, { RateLimitConfig } from "./plugins/rate-limit.js";
 import networkAddressesPlugin, {
   NetworkAddressesConfig,
@@ -44,6 +45,7 @@ import adminCommentsRoutes from "./routes/admin-comments.js";
 import adminNetworkBlocksRoutes from "./routes/admin-network-blocks.js";
 import adminSettingsRoutes from "./routes/admin-settings.js";
 import flairsRoutes from "./routes/flairs.js";
+import serviceRoutes from "./routes/service.js";
 
 export interface BuildAppOptions {
   db: Database;
@@ -56,6 +58,7 @@ export interface BuildAppOptions {
   preModerationDefault?: boolean;
   allowGuestComments?: boolean;
   sessionSecret?: string;
+  serviceToken?: string;
   trustProxy?: TrustProxyConfig;
   adminDistPath?: string;
   adminBase?: string;
@@ -164,6 +167,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
   app.register(problemDetailsPlugin);
   app.register(authenticatePlugin, { jwtSecret, db: options.db });
   app.register(adminSessionPlugin, { db: options.db, sessionSecret });
+  app.register(serviceTokenPlugin, { serviceToken: options.serviceToken });
   if (options.rateLimits) {
     app.register(rateLimitPlugin, { jwtSecret });
   }
@@ -220,6 +224,7 @@ export function buildApp(options: BuildAppOptions): FastifyInstance {
     discordOAuthEnabled: Boolean(discordOAuth),
   });
   app.register(flairsRoutes, { db: options.db });
+  app.register(serviceRoutes, { db: options.db });
 
   registerAdminSpa(app, options.adminDistPath, options.adminBase);
 

@@ -187,6 +187,7 @@ through.
 | `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET` / `DISCORD_REDIRECT_URI` | no | Enables Discord OAuth when all three are set. |
 | `CLIENT_ORIGIN` | no | Origin the OAuth callback may `postMessage` back to. Defaults to `*`. |
 | `SESSION_SECRET` | no | Signing secret for admin session cookies. Defaults to `JWT_SECRET`. |
+| `KOE_SERVICE_TOKEN` | no | Single shared secret for the scoped service API (`/api/v1/service/...`). Present it as `Authorization: Bearer <secret>`; it authorises only whole-set Flair assignment and provider Identity lookup. Unset rejects every service route. |
 | `TRUST_PROXY` | no | Trusted reverse proxies used to determine the real client IP. Unset trusts nothing, so `X-Forwarded-For` is ignored and the socket peer is used; this is the safe default. Set to a comma-separated list of proxy addresses or CIDR ranges (e.g. `127.0.0.1,10.0.0.0/8`). A bare hop count is rejected: it cannot validate the immediate peer, so a directly-reachable client could spoof its address. |
 | `TRUST_PROXY_ALLOW_UNBOUNDED` | no | Set to `true` to permit `TRUST_PROXY=true` (or `*`, or a catch-all range), which trusts every proxy. Off by default because it lets clients spoof their address. |
 | `NETWORK_BLOCKS_ENABLED` | no | Enables capture of the client address on authenticated write requests, so a later ban can auto-derive time-boxed Network Blocks. Off by default; when off, no address is ever stored. Requires `TRUST_PROXY` to see the real client IP behind a proxy. |
