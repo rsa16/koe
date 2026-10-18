@@ -3,10 +3,42 @@ import { createKoeClient } from "@koe/sdk";
 export interface WalkthroughOptions {
   baseUrl: string;
   adminToken: string;
+  serviceToken?: string;
+  demoAuthorId?: string;
+}
+
+const DEMO_FLAIR = {
+  slug: "demo-supporter",
+  label: "Demo Supporter",
+  colour: "#7c3aed",
+  rank: 100,
+};
+
+/** Opens an admin UI session (cookie + CSRF) from the demo's admin token. */
+async function openAdminSession(
+  baseUrl: string,
+  adminToken: string
+): Promise<{ cookie: string; csrf: string } | null> {
+  const response = await fetch(`${baseUrl}/api/v1/admin/session`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${adminToken}` },
+  });
+  if (!response.ok) {
+    return null;
+  }
+  const body = await response.json();
+  const cookies = response.headers.getSetCookie?.() ?? [];
+  const session = cookies.find((cookie) =>
+    cookie.startsWith("koe_admin_session=")
+  );
+  if (!session || typeof body.csrfToken !== "string") {
+    return null;
+  }
+  return { cookie: session.split(";")[0], csrf: body.csrfToken };
 }
 
 export async function runWalkthrough(options: WalkthroughOptions) {
-  const { baseUrl, adminToken } = options;
+  const { baseUrl, adminToken, serviceToken, demoAuthorId } = options;
   const client = createKoeClient({ baseUrl });
 
   console.log("\n==================================================");
@@ -155,8 +187,69 @@ export async function runWalkthrough(options: WalkthroughOptions) {
       console.log(`FAILED (${updateRes.status})`);
     }
 
+    // 11. Flairs: define a Flair, assign it through the service API, and see it
+    // appear on the author's comment payload (Tickets 25, 26, 27).
+    if (serviceToken && demoAuthorId) {
+      process.stdout.write("[25] Define a Flair via the admin API ... ");
+      const session = await openAdminSession(baseUrl, adminToken);
+      if (!session) {
+        console.log("FAILED (could not open an admin session)");
+      } else {
+        const createRes = await fetch(`${baseUrl}/api/v1/admin/flairs`, {
+          method: "POST",
+          headers: {
+            cookie: session.cookie,
+            "x-csrf-token": session.csrf,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify(DEMO_FLAIR),
+        });
+        if (createRes.status === 201 || createRes.status === 409) {
+          console.log(`PASSED (${DEMO_FLAIR.slug})`);
+        } else {
+          console.log(`FAILED (${createRes.status})`);
+        }
+      }
+
+      process.stdout.write("[26, 27] Assign a Flair via the service API and render it ... ");
+      const assignRes = await fetch(
+        `${baseUrl}/api/v1/service/users/${demoAuthorId}/flairs`,
+        {
+          method: "PUT",
+          headers: {
+            authorization: `Bearer ${serviceToken}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ slugs: [DEMO_FLAIR.slug] }),
+        }
+      );
+      if (!assignRes.ok) {
+        console.log(`FAILED (${assignRes.status})`);
+      } else {
+        const reader = await client.auth.anonymous();
+        const withFlairs = await client.comments.list(
+          thread.id,
+          undefined,
+          reader.accessToken
+        );
+        const authorComment = withFlairs.comments.find(
+          (comment) => comment.authorId === demoAuthorId
+        );
+        const shown = authorComment?.authorFlairs.some(
+          (flair) => flair.slug === DEMO_FLAIR.slug
+        );
+        if (shown) {
+          console.log(
+            `PASSED (author now displays "${DEMO_FLAIR.label}")`
+          );
+        } else {
+          console.log("FAILED (Flair not present on the comment payload)");
+        }
+      }
+    }
+
     console.log("\n==================================================");
-    console.log("   ALL TICKETS 01-10 VERIFIED SUCCESSFULLY!      ");
+    console.log("   WALKTHROUGH COMPLETE (tickets 01-10, 25-27)   ");
     console.log("==================================================\n");
   } catch (error) {
     console.error("\n[Walkthrough Error]:", error);

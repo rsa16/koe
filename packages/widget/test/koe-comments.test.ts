@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createKoeClient } from "@koe/sdk";
-import { createMemDb, Database, users } from "@koe/db";
+import { createMemDb, Database, flairs, userFlairs, users } from "@koe/db";
 import { buildApp } from "@koe/server/app";
 import { FastifyInstance } from "fastify";
 import { eq } from "drizzle-orm";
@@ -740,30 +740,112 @@ describe("<koe-comments> widget", () => {
     expect(reportedButton.disabled).toBe(true);
   });
 
-  it("shows an Admin chip next to an admin author's name", async () => {
+  async function currentUserId(token: string): Promise<string> {
+    const client = createKoeClient({ baseUrl });
+    const user = await client.auth.me(token);
+    return user.id;
+  }
+
+  async function seedFlair(
+    slug: string,
+    label: string,
+    colour: string,
+    rank: number
+  ): Promise<string> {
+    const [row] = await memDb
+      .insert(flairs)
+      .values({ slug, label, colour, rank })
+      .returning();
+    return row.id;
+  }
+
+  async function assignFlair(userId: string, flairId: string): Promise<void> {
+    await memDb.insert(userFlairs).values({ userId, flairId });
+  }
+
+  it("shows an Admin Staff Flair next to an admin author's name", async () => {
     const token = await roleToken("admin");
     localStorage.clear();
     const element = mount("widget-role-chip", `token="${token}"`);
     await waitFor(() => element.shadowRoot?.querySelector(".empty") !== null);
 
     await postComment(element, "Admin says hi");
-    await waitFor(() => element.shadowRoot?.querySelector(".role-badge") !== null);
+    await waitFor(() => element.shadowRoot?.querySelector(".flair") !== null);
 
-    const badge = element.shadowRoot!.querySelector(".role-badge")!;
-    expect(badge.textContent?.trim()).toBe("Admin");
+    const flair = element.shadowRoot!.querySelector(".flair")!;
+    expect(flair.textContent?.trim()).toBe("Admin");
+    expect(flair.getAttribute("part")).toBe("flair flair-staff");
+    expect(flair.classList.contains("flair--staff")).toBe(true);
   });
 
-  it("shows a Moderator chip next to a moderator author's name", async () => {
+  it("shows a Moderator Staff Flair next to a moderator author's name", async () => {
     const token = await roleToken("moderator");
     localStorage.clear();
     const element = mount("widget-role-chip-mod", `token="${token}"`);
     await waitFor(() => element.shadowRoot?.querySelector(".empty") !== null);
 
     await postComment(element, "Moderator says hi");
-    await waitFor(() => element.shadowRoot?.querySelector(".role-badge") !== null);
+    await waitFor(() => element.shadowRoot?.querySelector(".flair") !== null);
 
-    const badge = element.shadowRoot!.querySelector(".role-badge")!;
-    expect(badge.textContent?.trim()).toBe("Moderator");
+    const flair = element.shadowRoot!.querySelector(".flair")!;
+    expect(flair.textContent?.trim()).toBe("Moderator");
+    expect(flair.classList.contains("flair--staff")).toBe(true);
+  });
+
+  it("renders every held Supporter Flair by rank, Staff Flairs first", async () => {
+    const token = await roleToken("moderator");
+    localStorage.clear();
+    const userId = await currentUserId(token);
+    const goldId = await seedFlair("widget-gold", "Gold", "#d4af37", 30);
+    const bronzeId = await seedFlair("widget-bronze", "Bronze", "#cd7f32", 20);
+    await assignFlair(userId, goldId);
+    await assignFlair(userId, bronzeId);
+
+    const element = mount("widget-flairs", `token="${token}"`);
+    await waitFor(() => element.shadowRoot?.querySelector(".empty") !== null);
+    await postComment(element, "I hold several Flairs");
+
+    await waitFor(
+      () => element.shadowRoot!.querySelectorAll(".flair").length === 3
+    );
+
+    const rendered = Array.from(
+      element.shadowRoot!.querySelectorAll(".flair")
+    );
+    expect(rendered.map((flair) => flair.textContent?.trim())).toEqual([
+      "Moderator",
+      "Bronze",
+      "Gold",
+    ]);
+    // Only the derived Staff Flair carries the staff variant part + modifier.
+    expect(rendered[0].getAttribute("part")).toBe("flair flair-staff");
+    expect(rendered[1].getAttribute("part")).toBe("flair");
+    expect(rendered[2].getAttribute("part")).toBe("flair");
+    expect(rendered.filter((f) => f.classList.contains("flair--staff"))).toHaveLength(
+      1
+    );
+    // The definition colour is exposed to the host as a hook.
+    expect((rendered[1] as HTMLElement).style.getPropertyValue("--koe-flair-colour")).toBe(
+      "#cd7f32"
+    );
+    expect((rendered[2] as HTMLElement).style.getPropertyValue("--koe-flair-colour")).toBe(
+      "#d4af37"
+    );
+    // Staff Flairs have no definition colour and fall back to the theme.
+    expect((rendered[0] as HTMLElement).style.getPropertyValue("--koe-flair-colour")).toBe(
+      ""
+    );
+  });
+
+  it("renders no Flair for an author who holds nothing", async () => {
+    const element = mount("widget-no-flairs");
+    await waitFor(() => element.shadowRoot?.querySelector(".empty") !== null);
+    await postComment(element, "Just a regular guest");
+    await waitFor(
+      () => element.shadowRoot!.querySelectorAll(".comment").length === 1
+    );
+
+    expect(element.shadowRoot!.querySelector(".flair")).toBeNull();
   });
 
   it("lets a moderator pin and unpin a comment", async () => {

@@ -165,6 +165,49 @@ export const FlairListResponseSchema = z.object({
 });
 export type FlairListResponse = z.infer<typeof FlairListResponseSchema>;
 
+// A Flair as rendered beside an author's name on a Comment. Supporter Flairs are
+// projected from the definition rows the author holds; Staff Flairs are derived
+// from the author's role and are never stored, so they carry no definition
+// colour (`colour: null`) and the widget falls back to the host accent token.
+export const CommentAuthorFlairSchema = z.object({
+  slug: FlairSlugSchema,
+  label: FlairLabelSchema,
+  colour: FlairColourSchema.nullable(),
+  rank: FlairRankSchema,
+  staff: z.boolean().default(false),
+});
+export type CommentAuthorFlair = z.infer<typeof CommentAuthorFlairSchema>;
+
+// Staff Flairs are derived from a User's role, never held or chosen. A negative
+// rank keeps them ahead of every Supporter Flair, and each role maps to exactly
+// one. `admin` outranks `moderator`.
+export const ADMIN_STAFF_FLAIR: CommentAuthorFlair = {
+  slug: "admin",
+  label: "Admin",
+  colour: null,
+  rank: -200,
+  staff: true,
+};
+
+export const MODERATOR_STAFF_FLAIR: CommentAuthorFlair = {
+  slug: "moderator",
+  label: "Moderator",
+  colour: null,
+  rank: -100,
+  staff: true,
+};
+
+/** The Staff Flairs an author with this role displays; empty for everyone else. */
+export function staffFlairsForRole(role: UserRole | null): CommentAuthorFlair[] {
+  if (role === "admin") {
+    return [ADMIN_STAFF_FLAIR];
+  }
+  if (role === "moderator") {
+    return [MODERATOR_STAFF_FLAIR];
+  }
+  return [];
+}
+
 // Service API schemas
 // A scoped service credential (a single configured secret) may do exactly two
 // things: replace a User's held Flairs wholesale, and resolve a provider
@@ -329,6 +372,7 @@ export type CommentNode = Comment & {
   authorName: string | null;
   authorAvatarUrl: string | null;
   authorRole: UserRole | null;
+  authorFlairs: CommentAuthorFlair[];
   children: CommentNode[];
   userVote: VoteValue | null;
   userReactions: string[];
@@ -338,6 +382,9 @@ export const CommentNodeSchema: z.ZodType<CommentNode, z.ZodTypeDef, unknown> =
     authorName: z.string().nullable().default(null),
     authorAvatarUrl: z.string().url().nullable().default(null),
     authorRole: UserRoleSchema.nullable().default(null),
+    // Already ordered server-side, Staff Flairs first; the widget renders the
+    // list as given and never infers or sorts it.
+    authorFlairs: z.array(CommentAuthorFlairSchema).default([]),
     children: z.lazy(() => z.array(CommentNodeSchema)),
     userVote: VoteValueSchema.nullable().default(null),
     userReactions: z.array(z.string()).default([]),

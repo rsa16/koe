@@ -214,18 +214,31 @@
     white-space: nowrap;
   }
 
-  .role-badge {
+  /*
+   * A Flair pill. The widget sets `--koe-flair-colour` inline from the Flair
+   * definition; a host reads it back inside `::part(flair)` to restyle. Staff
+   * Flairs have no definition colour and fall back to the accent token.
+   */
+  .flair {
     display: inline-flex;
     align-items: center;
     padding: 0 calc(var(--koe-space) * 2);
     border-radius: var(--koe-radius-full);
     font-size: 0.65rem;
     font-weight: 700;
+    white-space: nowrap;
+    color: var(--koe-flair-colour, var(--koe-accent));
+    background-color: var(--koe-accent-soft);
+    background-color: color-mix(
+      in srgb,
+      var(--koe-flair-colour, var(--koe-accent)) 14%,
+      var(--koe-surface)
+    );
+  }
+
+  .flair--staff {
     letter-spacing: 0.03em;
     text-transform: uppercase;
-    color: var(--koe-accent);
-    background-color: var(--koe-accent-soft);
-    white-space: nowrap;
   }
 
   .pinned-badge {

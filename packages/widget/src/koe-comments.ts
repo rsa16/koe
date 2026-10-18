@@ -1,4 +1,5 @@
 import {
+  CommentAuthorFlair,
   CommentNode,
   createImgbbMediaProvider,
   createKoeClient,
@@ -1406,6 +1407,19 @@ export class KoeComments extends LitElement {
     `;
   }
 
+  /** A Flair as displayed beside an author's name. Staff Flairs expose an extra
+   * `flair-staff` part so a host can style the variant, and set no
+   * `--koe-flair-colour`, falling back to the accent token. */
+  private renderFlair(flair: CommentAuthorFlair): TemplateResult {
+    return html`<span
+      part=${flair.staff ? "flair flair-staff" : "flair"}
+      class="flair ${flair.staff ? "flair--staff" : ""}"
+      data-flair=${flair.slug}
+      style=${flair.colour ? `--koe-flair-colour: ${flair.colour}` : nothing}
+      >${flair.label}</span
+    >`;
+  }
+
   private renderComment(comment: CommentNode, depth = 0): TemplateResult {
     const createdAt = new Date(comment.createdAt);
     const reactions = this.visibleReactions(comment);
@@ -1417,8 +1431,6 @@ export class KoeComments extends LitElement {
     const reported = this.reportedComments.has(comment.id);
     const childCount = comment.children.length;
     const isDeleted = comment.status === "deleted";
-    const isStaff =
-      comment.authorRole === "admin" || comment.authorRole === "moderator";
     return html`
       <li part="comment" class="comment">
         <div class="flex gap-3">
@@ -1433,14 +1445,7 @@ export class KoeComments extends LitElement {
               >
                 ${comment.authorName ?? "Guest"}
               </span>
-              ${isStaff
-                ? html`<span
-                    part="role-badge"
-                    class="role-badge ${comment.authorRole}"
-                  >
-                    ${comment.authorRole === "admin" ? "Admin" : "Moderator"}
-                  </span>`
-                : nothing}
+              ${comment.authorFlairs.map((flair) => this.renderFlair(flair))}
               <span class="text-koe-border-strong" aria-hidden="true"
                 >·</span
               >

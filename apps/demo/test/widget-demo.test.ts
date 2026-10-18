@@ -61,10 +61,11 @@ fixCrossRealmUint8Array();
 describe("Widget in Demo Page Environment", () => {
   let app: FastifyInstance;
   let baseUrl: string;
+  let demo: Awaited<ReturnType<typeof createDemoServer>>;
 
   beforeAll(async () => {
     installLocalStorageMock();
-    const demo = await createDemoServer({ port: 0, host: "127.0.0.1" });
+    demo = await createDemoServer({ port: 0, host: "127.0.0.1" });
     app = demo.app;
     await app.listen({ port: 0, host: "127.0.0.1" });
     const address = app.server.address();
@@ -90,5 +91,57 @@ describe("Widget in Demo Page Environment", () => {
 
     expect(el.shadowRoot?.textContent).toContain("Welcome to Koe");
     expect(el.shadowRoot?.textContent).not.toContain("Loading comments...");
+  });
+
+  it("shows a Flair after it is assigned through the service API", async () => {
+    const sessionResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/admin/session",
+      headers: { authorization: `Bearer ${demo.seed.adminToken}` },
+    });
+    expect(sessionResponse.statusCode).toBe(200);
+    const csrf = sessionResponse.json().csrfToken as string;
+    const adminSession = sessionResponse.cookies.find(
+      (cookie) => cookie.name === "koe_admin_session"
+    )!.value;
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/admin/flairs",
+      cookies: { koe_admin_session: adminSession, koe_csrf: csrf },
+      headers: { "x-csrf-token": csrf },
+      payload: {
+        slug: "widget-demo-supporter",
+        label: "Supporter",
+        colour: "#7c3aed",
+        rank: 100,
+      },
+    });
+    expect(createResponse.statusCode).toBe(201);
+
+    const assignResponse = await app.inject({
+      method: "PUT",
+      url: `/api/v1/service/users/${demo.seed.demoAuthor.id}/flairs`,
+      headers: { authorization: `Bearer ${demo.serviceToken}` },
+      payload: { slugs: ["widget-demo-supporter"] },
+    });
+    expect(assignResponse.statusCode).toBe(200);
+
+    const el = document.createElement("koe-comments") as KoeComments;
+    el.setAttribute("base-url", baseUrl);
+    el.setAttribute("thread-ref", "demo-article");
+    document.body.appendChild(el);
+
+    await waitFor(
+      () =>
+        el.shadowRoot?.querySelector('[part="flair"]')?.textContent?.trim() ===
+        "Supporter"
+    );
+
+    const flair = el.shadowRoot!.querySelector(
+      '[part="flair"]'
+    ) as HTMLElement;
+    expect(flair).not.toBeNull();
+    expect(flair.style.getPropertyValue("--koe-flair-colour")).toBe("#7c3aed");
   });
 });

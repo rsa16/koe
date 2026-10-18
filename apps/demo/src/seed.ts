@@ -6,6 +6,7 @@ export interface SeedResult {
   adminUser: typeof users.$inferSelect;
   adminToken: string;
   demoThread: typeof threads.$inferSelect;
+  demoAuthor: typeof users.$inferSelect;
 }
 
 export async function seedDemoData(db: Database, jwtSecret: string): Promise<SeedResult> {
@@ -104,5 +105,6 @@ export async function seedDemoData(db: Database, jwtSecret: string): Promise<See
     adminUser,
     adminToken,
     demoThread,
+    demoAuthor,
   };
 }

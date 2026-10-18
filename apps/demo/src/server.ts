@@ -13,19 +13,27 @@ export interface DemoServerOptions {
   port?: number;
   host?: string;
   jwtSecret?: string;
+  serviceToken?: string;
   skipWalkthrough?: boolean;
 }
+
+const DEFAULT_DEMO_SERVICE_TOKEN = "demo-service-token-at-least-32-characters";
 
 export async function createDemoServer(options: DemoServerOptions = {}) {
   const port = options.port ?? 3000;
   const host = options.host ?? "0.0.0.0";
   const jwtSecret = options.jwtSecret ?? "demo-secret-key-at-least-32-characters-long";
+  // The demo owns a service credential so the walkthrough (and tests) can
+  // assign Flairs through the scoped service API, exactly as the `supporters`
+  // service would.
+  const serviceToken = options.serviceToken ?? DEFAULT_DEMO_SERVICE_TOKEN;
 
   const { db } = await createMemDb();
 
   const app = buildApp({
     db,
     jwtSecret,
+    serviceToken,
     logger: false,
     adminDistPath: path.resolve(__dirname, "../../../apps/admin/dist"),
   });
@@ -46,11 +54,12 @@ export async function createDemoServer(options: DemoServerOptions = {}) {
     port,
     host,
     jwtSecret,
+    serviceToken,
   };
 }
 
 async function main() {
-  const { app, seed, port, host } = await createDemoServer();
+  const { app, seed, port, host, serviceToken } = await createDemoServer();
 
   await app.listen({ port, host });
   const baseUrl = `http://localhost:${port}`;
@@ -61,7 +70,12 @@ async function main() {
   console.log(`👤 Admin user: ${seed.adminUser.name} (${seed.adminUser.id})`);
 
   // Run automated verification walkthrough
-  await runWalkthrough({ baseUrl, adminToken: seed.adminToken });
+  await runWalkthrough({
+    baseUrl,
+    adminToken: seed.adminToken,
+    serviceToken,
+    demoAuthorId: seed.demoAuthor.id,
+  });
 
   console.log(`\n🌐 Open your browser at ${baseUrl} to interact with the Koe widget!`);
   console.log("Press Ctrl+C to stop.\n");

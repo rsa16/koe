@@ -305,6 +305,14 @@ source of display order. Definitions are managed from the admin UI's Flairs page
 through the session-cookie endpoints below. Deleting a `Flair` removes every
 `User`'s holding of it rather than leaving dangling references.
 
+Each `CommentNode` on `GET /api/v1/threads/:id/comments` carries
+`authorFlairs`: the Flairs to display beside that comment's author, already
+ordered (Staff Flairs first, then by `rank`). Supporter Flairs are the
+definitions the author holds; **Staff Flairs** (`admin`, `moderator`) are derived
+from the author's role, are always shown and are never held or chosen. Staff
+Flairs have no definition colour (`colour: null`), so the widget falls back to
+its accent token. The widget never sorts or truncates the list.
+
 ### Admin UI API
 
 Routes used by the `/admin` single-page app. They authenticate with the
@@ -585,6 +593,7 @@ koe-comments::part(comment) {
 | Warning | `--koe-warning`, `--koe-warning-soft` |
 | Brand | `--koe-gif-from`, `--koe-gif-to` |
 | Thread lines | `--koe-thread-line-0` … `--koe-thread-line-3` |
+| Flair | `--koe-flair-colour` (set per-`flair` part from the definition; a host reads it back to restyle) |
 | Typography | `--koe-font`, `--koe-font-mono` |
 | Radius | `--koe-radius-sm`, `--koe-radius-md`, `--koe-radius-lg`, `--koe-radius-xl`, `--koe-radius-2xl`, `--koe-radius-full` (names match the `rounded-*` scale they drive) |
 | Spacing | `--koe-space` (base unit; every Tailwind spacing utility is a multiple) |
@@ -595,8 +604,8 @@ koe-comments::part(comment) {
 `composer-shell`, `toolbar`, `toolbar-button`, `toolbar-gif`, `toolbar-upload`,
 `textarea`, `composer-actions`, `cancel`, `submit`, `gif-picker`, `gif-search`,
 `gif-grid`, `gif-url`, `gif-insert`, `gif-close`, `loading`, `empty`,
-`empty-title`, `empty-text`, `list`, `comment`, `avatar`, `author`, `time`,
-`pending-badge`, `body`, `actions`, `vote-controls`, `vote-up`, `vote-down`,
+`empty-title`, `empty-text`, `list`, `comment`, `avatar`, `author`, `flair`,
+`flair-staff`, `time`, `pending-badge`, `body`, `actions`, `vote-controls`, `vote-up`, `vote-down`,
 `vote-score`, `reactions`, `reaction`, `reaction-count`, `reactions-toggle`,
 `add-reaction`, `reaction-picker`, `reaction-picker-button`, `report-button`,
 `report-picker`, `report-input`, `report-cancel`, `report-submit`,
@@ -604,6 +613,24 @@ koe-comments::part(comment) {
 
 `<koe-article-reactions>`: `root`, `error`, `loading`, `group`, `reaction`,
 `reaction-count`.
+
+#### Flair colour hook
+
+Each rendered Flair is a `part="flair"` element that exposes its definition
+colour as the `--koe-flair-colour` custom property, so a host can reskin the
+pills from its own palette. Staff Flairs set no colour and inherit the accent
+token, and additionally expose `part="flair-staff"` for the variant:
+
+```css
+/* Read the Flair's own colour back inside the part. */
+koe-comments::part(flair) {
+  background-color: color-mix(in srgb, var(--koe-flair-colour) 12%, transparent);
+}
+/* Style derived Staff Flairs distinctly. */
+koe-comments::part(flair-staff) {
+  outline: 1px solid currentColor;
+}
+```
 
 #### `<slot>`s
 

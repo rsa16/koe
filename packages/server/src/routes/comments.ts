@@ -1,4 +1,5 @@
 import {
+  CommentAuthorFlair,
   CommentListQuerySchema,
   CommentListResponseSchema,
   CommentSchema,
@@ -22,6 +23,7 @@ import { and, eq, gt, inArray, notInArray, or, sql } from "drizzle-orm";
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { computeReplyPosition } from "../replies.js";
 import { parseCommentIdParam } from "../comment-scoped.js";
+import { authorFlairsFor, loadHeldFlairs } from "../author-flairs.js";
 import {
   DEFAULT_DUPLICATE_COMMENT_WINDOW_MS,
   RateLimitConfig,
@@ -276,50 +278,59 @@ export default async function commentsRoutes(
       eq(comments.depth, 0),
       visibleFilter
     );
-    const roots = (
-      await db
-        .select({
-          comment: comments,
-          authorName: users.name,
-          authorAvatarUrl: users.avatarUrl,
-          authorRole: users.role,
-        })
-        .from(comments)
-        .leftJoin(users, eq(users.id, comments.authorId))
-        .where(whereRoots)
-        .orderBy(
-          sql`${comments.pinnedAt} DESC NULLS LAST`,
-          comments.createdAt,
-          comments.id
-        )
-        .limit(pageSize)
-        .offset((page - 1) * pageSize)
-    ).map(attachAuthor);
+    const rootRows = await db
+      .select({
+        comment: comments,
+        authorName: users.name,
+        authorAvatarUrl: users.avatarUrl,
+        authorRole: users.role,
+      })
+      .from(comments)
+      .leftJoin(users, eq(users.id, comments.authorId))
+      .where(whereRoots)
+      .orderBy(
+        sql`${comments.pinnedAt} DESC NULLS LAST`,
+        comments.createdAt,
+        comments.id
+      )
+      .limit(pageSize)
+      .offset((page - 1) * pageSize);
     const total = await db.$count(comments, whereRoots);
 
-    const descendants = (
-      await db
-        .select({
-          comment: comments,
-          authorName: users.name,
-          authorAvatarUrl: users.avatarUrl,
-          authorRole: users.role,
-        })
-        .from(comments)
-        .leftJoin(users, eq(users.id, comments.authorId))
-        .where(
-          and(
-            eq(comments.threadId, threadId),
-            gt(comments.depth, 0),
-            visibleFilter
-          )
+    const descendantRows = await db
+      .select({
+        comment: comments,
+        authorName: users.name,
+        authorAvatarUrl: users.avatarUrl,
+        authorRole: users.role,
+      })
+      .from(comments)
+      .leftJoin(users, eq(users.id, comments.authorId))
+      .where(
+        and(
+          eq(comments.threadId, threadId),
+          gt(comments.depth, 0),
+          visibleFilter
         )
-        .orderBy(
-          sql`${comments.pinnedAt} DESC NULLS LAST`,
-          comments.createdAt,
-          comments.id
-        )
-    ).map(attachAuthor);
+      )
+      .orderBy(
+        sql`${comments.pinnedAt} DESC NULLS LAST`,
+        comments.createdAt,
+        comments.id
+      );
+
+    // Every Flair an author displays is resolved once per page: Staff Flairs
+    // from the role plus the Supporter Flairs they hold, ordered server-side.
+    const authorIds = [
+      ...new Set(
+        [...rootRows, ...descendantRows].map((row) => row.comment.authorId)
+      ),
+    ];
+    const heldByAuthor = await loadHeldFlairs(db, authorIds);
+    const withFlairs = (row: CommentAuthorRow): CommentRowWithAuthor =>
+      attachAuthor(row, heldByAuthor);
+    const roots = rootRows.map(withFlairs);
+    const descendants = descendantRows.map(withFlairs);
 
     let userVotes: Map<string, 1 | -1> | undefined;
     let userReactions: Map<string, string[]> | undefined;
@@ -523,10 +534,17 @@ export default async function commentsRoutes(
 }
 
 type CommentRow = typeof comments.$inferSelect;
+interface CommentAuthorRow {
+  comment: CommentRow;
+  authorName: string | null;
+  authorAvatarUrl: string | null;
+  authorRole: UserRole | null;
+}
 interface CommentRowWithAuthor extends CommentRow {
   authorName: string | null;
   authorAvatarUrl: string | null;
   authorRole: UserRole | null;
+  authorFlairs: CommentAuthorFlair[];
 }
 interface CommentTreeNode extends CommentRowWithAuthor {
   children: CommentTreeNode[];
@@ -534,12 +552,10 @@ interface CommentTreeNode extends CommentRowWithAuthor {
   userReactions: string[];
 }
 
-function attachAuthor(row: {
-  comment: CommentRow;
-  authorName: string | null;
-  authorAvatarUrl: string | null;
-  authorRole: UserRole | null;
-}): CommentRowWithAuthor {
+function attachAuthor(
+  row: CommentAuthorRow,
+  heldByAuthor: Map<string, CommentAuthorFlair[]>
+): CommentRowWithAuthor {
   const deleted = row.comment.status === "deleted";
   return {
     ...row.comment,
@@ -549,6 +565,10 @@ function attachAuthor(row: {
     authorName: row.authorName,
     authorAvatarUrl: row.authorAvatarUrl,
     authorRole: row.authorRole,
+    authorFlairs: authorFlairsFor(
+      row.authorRole,
+      heldByAuthor.get(row.comment.authorId) ?? []
+    ),
   };
 }
 
