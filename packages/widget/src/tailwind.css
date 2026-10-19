@@ -202,6 +202,20 @@
     margin: var(--koe-space) 0;
   }
 
+  /* A pinned Comment gets a tinted, bordered box so the whole Comment reads as
+   * pinned at a glance; the badge itself sits at the top right of the header. */
+  .comment-shell--pinned {
+    padding: calc(var(--koe-space) * 3);
+    border: 1px solid
+      color-mix(in srgb, var(--koe-accent) 32%, var(--koe-border));
+    border-radius: var(--koe-radius-2xl);
+    background-color: color-mix(
+      in srgb,
+      var(--koe-accent) 7%,
+      var(--koe-surface)
+    );
+  }
+
   .pending-badge {
     display: inline-flex;
     align-items: center;
@@ -239,6 +253,25 @@
   .flair--staff {
     letter-spacing: 0.03em;
     text-transform: uppercase;
+  }
+
+  /* Staff Flairs are icon-only: a shield for moderators, plus a sword for
+   * admins. The label stays in the DOM for assistive technology. */
+  .staff-flair {
+    gap: calc(var(--koe-space) * 0.5);
+    padding: calc(var(--koe-space) * 0.5) calc(var(--koe-space) * 1.5);
+    border: 1px solid
+      color-mix(
+        in srgb,
+        var(--koe-flair-colour, var(--koe-accent)) 28%,
+        transparent
+      );
+  }
+
+  .staff-flair-icons {
+    display: inline-flex;
+    align-items: center;
+    gap: calc(var(--koe-space) * 0.25);
   }
 
   .pinned-badge {

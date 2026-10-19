@@ -118,6 +118,10 @@ const ICON_PATHS = {
     "M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z",
   flag: "M3 3v1.5M3 21v-6m0 0 2.77-.693a9 9 0 0 1 6.208.682l.108.054a9 9 0 0 0 6.086.71l3.114-.732a48.524 48.524 0 0 1-.005-10.499l-3.11.732a9 9 0 0 1-6.085-.711l-.108-.054a9 9 0 0 0-6.208-.682L3 4.5M3 15V4.5",
   pin: "M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 0c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z",
+  shield:
+    "M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z",
+  sword:
+    "M14.5 17.5 3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2",
   trash:
     "m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0",
 };
@@ -1407,13 +1411,34 @@ export class KoeComments extends LitElement {
     `;
   }
 
-  /** A Flair as displayed beside an author's name. Staff Flairs expose an extra
+  /** A Flair as displayed below an author's name. Staff Flairs are rendered as
+   * role icons (a shield for moderators, a shield and sword for admins) while
+   * keeping their label available to assistive technology. They expose an extra
    * `flair-staff` part so a host can style the variant, and set no
    * `--koe-flair-colour`, falling back to the accent token. */
   private renderFlair(flair: CommentAuthorFlair): TemplateResult {
+    if (flair.staff) {
+      const isAdmin = flair.slug === "admin";
+      return html`<span
+        part="flair flair-staff"
+        class="flair flair--staff staff-flair ${isAdmin
+          ? "staff-flair--admin"
+          : "staff-flair--moderator"}"
+        data-flair=${flair.slug}
+        role="img"
+        aria-label=${flair.label}
+        title=${flair.label}
+      >
+        <span class="staff-flair-icons" aria-hidden="true">
+          ${this.icon(ICON_PATHS.shield, "h-3.5 w-3.5")}
+          ${isAdmin ? this.icon(ICON_PATHS.sword, "h-3.5 w-3.5") : nothing}
+        </span>
+        <span class="sr-only">${flair.label}</span>
+      </span>`;
+    }
     return html`<span
-      part=${flair.staff ? "flair flair-staff" : "flair"}
-      class="flair ${flair.staff ? "flair--staff" : ""}"
+      part="flair"
+      class="flair"
       data-flair=${flair.slug}
       style=${flair.colour ? `--koe-flair-colour: ${flair.colour}` : nothing}
       >${flair.label}</span
@@ -1431,41 +1456,69 @@ export class KoeComments extends LitElement {
     const reported = this.reportedComments.has(comment.id);
     const childCount = comment.children.length;
     const isDeleted = comment.status === "deleted";
+    const staffFlairs = comment.authorFlairs.filter((flair) => flair.staff);
+    const supporterFlairs = comment.authorFlairs.filter(
+      (flair) => !flair.staff
+    );
     return html`
-      <li part="comment" class="comment">
-        <div class="flex gap-3">
+      <li
+        part="comment"
+        class="comment ${comment.pinnedAt ? "comment--pinned" : ""}"
+      >
+        <div
+          class="comment-shell flex gap-3 ${comment.pinnedAt
+            ? "comment-shell--pinned"
+            : ""}"
+        >
           ${this.avatar(comment.authorId, {
             url: comment.authorAvatarUrl,
           })}
           <div class="min-w-0 flex-1">
-            <div class="mb-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
-              <span
-                part="author"
-                class="text-sm font-semibold text-koe-text"
-              >
-                ${comment.authorName ?? "Guest"}
-              </span>
-              ${comment.authorFlairs.map((flair) => this.renderFlair(flair))}
-              <span class="text-koe-border-strong" aria-hidden="true"
-                >·</span
-              >
-              <time
-                part="time"
-                class="comment-time text-xs text-koe-text-subtle"
-                datetime=${createdAt.toISOString()}
-                title=${createdAt.toLocaleString()}
-              >
-                ${formatRelativeTime(createdAt)}
-              </time>
+            <div class="comment-head mb-1 flex items-start gap-2">
+              <div class="min-w-0 flex-1">
+                <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                  <span
+                    part="author"
+                    class="text-sm font-semibold text-koe-text"
+                  >
+                    ${comment.authorName ?? "Guest"}
+                  </span>
+                  ${staffFlairs.map((flair) => this.renderFlair(flair))}
+                  <span class="text-koe-border-strong" aria-hidden="true"
+                    >·</span
+                  >
+                  <time
+                    part="time"
+                    class="comment-time text-xs text-koe-text-subtle"
+                    datetime=${createdAt.toISOString()}
+                    title=${createdAt.toLocaleString()}
+                  >
+                    ${formatRelativeTime(createdAt)}
+                  </time>
+                  ${comment.status === "pending"
+                    ? html`<span part="pending-badge" class="pending-badge"
+                        >Pending approval</span
+                      >`
+                    : nothing}
+                </div>
+                ${supporterFlairs.length > 0
+                  ? html`<div
+                      part="flairs"
+                      class="comment-flairs mt-1 flex flex-wrap items-center gap-1.5"
+                    >
+                      ${supporterFlairs.map((flair) =>
+                        this.renderFlair(flair)
+                      )}
+                    </div>`
+                  : nothing}
+              </div>
               ${comment.pinnedAt
-                ? html`<span part="pinned-badge" class="pinned-badge">
+                ? html`<span
+                    part="pinned-badge"
+                    class="pinned-badge ml-auto shrink-0"
+                  >
                     ${this.icon(ICON_PATHS.pin, "h-3 w-3")}Pinned
                   </span>`
-                : nothing}
-              ${comment.status === "pending"
-                ? html`<span part="pending-badge" class="pending-badge"
-                    >Pending approval</span
-                  >`
                 : nothing}
             </div>
             ${isDeleted
