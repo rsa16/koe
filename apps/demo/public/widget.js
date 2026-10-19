@@ -6580,7 +6580,7 @@ var KoeComments = class extends i4 {
       </div>
     `;
   }
-  /** A Flair as displayed below an author's name. Staff Flairs are rendered as
+  /** A Flair as displayed beside an author's name. Staff Flairs are rendered as
    * role icons (a shield for moderators, a shield and sword for admins) while
    * keeping their label available to assistive technology. They expose an extra
    * `flair-staff` part so a host can style the variant, and set no
@@ -6622,10 +6622,6 @@ var KoeComments = class extends i4 {
     const reported = this.reportedComments.has(comment.id);
     const childCount = comment.children.length;
     const isDeleted = comment.status === "deleted";
-    const staffFlairs = comment.authorFlairs.filter((flair) => flair.staff);
-    const supporterFlairs = comment.authorFlairs.filter(
-      (flair) => !flair.staff
-    );
     return b2`
       <li
         part="comment"
@@ -6647,7 +6643,9 @@ var KoeComments = class extends i4 {
                   >
                     ${comment.authorName ?? "Guest"}
                   </span>
-                  ${staffFlairs.map((flair) => this.renderFlair(flair))}
+                  ${comment.authorFlairs.map(
+      (flair) => this.renderFlair(flair)
+    )}
                   <span class="text-koe-border-strong" aria-hidden="true"
                     >·</span
                   >
@@ -6663,14 +6661,6 @@ var KoeComments = class extends i4 {
                         >Pending approval</span
                       >` : A}
                 </div>
-                ${supporterFlairs.length > 0 ? b2`<div
-                      part="flairs"
-                      class="comment-flairs mt-1 flex flex-wrap items-center gap-1.5"
-                    >
-                      ${supporterFlairs.map(
-      (flair) => this.renderFlair(flair)
-    )}
-                    </div>` : A}
               </div>
               ${comment.pinnedAt ? b2`<span
                     part="pinned-badge"

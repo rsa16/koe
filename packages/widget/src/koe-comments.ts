@@ -1411,7 +1411,7 @@ export class KoeComments extends LitElement {
     `;
   }
 
-  /** A Flair as displayed below an author's name. Staff Flairs are rendered as
+  /** A Flair as displayed beside an author's name. Staff Flairs are rendered as
    * role icons (a shield for moderators, a shield and sword for admins) while
    * keeping their label available to assistive technology. They expose an extra
    * `flair-staff` part so a host can style the variant, and set no
@@ -1456,10 +1456,6 @@ export class KoeComments extends LitElement {
     const reported = this.reportedComments.has(comment.id);
     const childCount = comment.children.length;
     const isDeleted = comment.status === "deleted";
-    const staffFlairs = comment.authorFlairs.filter((flair) => flair.staff);
-    const supporterFlairs = comment.authorFlairs.filter(
-      (flair) => !flair.staff
-    );
     return html`
       <li
         part="comment"
@@ -1483,7 +1479,9 @@ export class KoeComments extends LitElement {
                   >
                     ${comment.authorName ?? "Guest"}
                   </span>
-                  ${staffFlairs.map((flair) => this.renderFlair(flair))}
+                  ${comment.authorFlairs.map((flair) =>
+                    this.renderFlair(flair)
+                  )}
                   <span class="text-koe-border-strong" aria-hidden="true"
                     >·</span
                   >
@@ -1501,16 +1499,6 @@ export class KoeComments extends LitElement {
                       >`
                     : nothing}
                 </div>
-                ${supporterFlairs.length > 0
-                  ? html`<div
-                      part="flairs"
-                      class="comment-flairs mt-1 flex flex-wrap items-center gap-1.5"
-                    >
-                      ${supporterFlairs.map((flair) =>
-                        this.renderFlair(flair)
-                      )}
-                    </div>`
-                  : nothing}
               </div>
               ${comment.pinnedAt
                 ? html`<span

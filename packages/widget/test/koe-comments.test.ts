@@ -763,7 +763,7 @@ describe("<koe-comments> widget", () => {
     await memDb.insert(userFlairs).values({ userId, flairId });
   }
 
-  it("shows an Admin Staff Flair below an admin author's name", async () => {
+  it("shows an Admin Staff Flair beside an admin author's name", async () => {
     const token = await roleToken("admin");
     localStorage.clear();
     const element = mount("widget-role-chip", `token="${token}"`);
@@ -779,11 +779,9 @@ describe("<koe-comments> widget", () => {
     expect(flair.classList.contains("staff-flair--admin")).toBe(true);
     expect(flair.getAttribute("aria-label")).toBe("Admin");
     expect(flair.querySelectorAll("svg")).toHaveLength(2);
-    // Staff Flairs stay on the author row, not in the Supporter Flair row.
-    expect(flair.closest('[part="flairs"]')).toBeNull();
   });
 
-  it("shows a Moderator Staff Flair below a moderator author's name", async () => {
+  it("shows a Moderator Staff Flair beside a moderator author's name", async () => {
     const token = await roleToken("moderator");
     localStorage.clear();
     const element = mount("widget-role-chip-mod", `token="${token}"`);
@@ -798,7 +796,6 @@ describe("<koe-comments> widget", () => {
     expect(flair.classList.contains("staff-flair--moderator")).toBe(true);
     expect(flair.getAttribute("aria-label")).toBe("Moderator");
     expect(flair.querySelectorAll("svg")).toHaveLength(1);
-    expect(flair.closest('[part="flairs"]')).toBeNull();
   });
 
   it("renders every held Supporter Flair by rank, Staff Flairs first", async () => {
@@ -844,16 +841,6 @@ describe("<koe-comments> widget", () => {
     expect((rendered[0] as HTMLElement).style.getPropertyValue("--koe-flair-colour")).toBe(
       ""
     );
-
-    // Flairs sit in their own row beneath the author name; the Staff Flair
-    // stays on the author row itself.
-    const author = element.shadowRoot!.querySelector('[part="author"]')!;
-    const flairRow = element.shadowRoot!.querySelector('[part="flairs"]')!;
-    expect(flairRow).not.toBeNull();
-    expect(flairRow.querySelectorAll(".flair")).toHaveLength(2);
-    expect(
-      author.compareDocumentPosition(flairRow) & Node.DOCUMENT_POSITION_FOLLOWING
-    ).toBeTruthy();
   });
 
   it("renders no Flair for an author who holds nothing", async () => {
